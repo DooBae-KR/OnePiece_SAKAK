@@ -85,6 +85,7 @@ async function api(path, opt) {
   return res.status === 204 ? null : res.json();
 }
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtDate = (t) => { if (!t) return '-'; const d = new Date(t); if (isNaN(d)) return '-'; return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const $ = (id) => document.getElementById(id);
 
 const S = {
@@ -196,7 +197,7 @@ function card(c) {
   const docs = c.wf_case_docs || []; const defs = S.pdocs[c.proc_id] || [];
   const open = S.openId === c.id;
   const grp = group(c);
-  return '<div style="border-top:1px solid #E5E7EB;padding:12px 0"><div class="row"><span class="grow"><b>' + esc(c.form_name) + '</b><br>기안자 ' + esc(c.applicant_name) + ' · 생년월일 ' + esc(c.birth || '-') + '</span>' +
+  return '<div style="border-top:1px solid #E5E7EB;padding:12px 0"><div class="row"><span class="grow"><b>' + esc(c.form_name) + '</b><br>기안자 ' + esc(c.applicant_name) + ' · 생년월일 ' + esc(c.birth || '-') + ' · 신청일자 ' + fmtDate(c.created_at) + '</span>' +
     statusChip(c) + '</div>' +
     (grp === 'review' ? '<ul style="margin:8px 0 0;padding-left:20px;color:#7F1D1D">' + c.reasons.map((r) => '<li>' + esc(r) + '</li>').join('') + '</ul>' : '') +
     (c.status === 'VALI오류' && c.typo ? '<div class="notice err" style="margin-top:8px" role="alert">VALI 체크: ' + esc(c.typo.field) + ' 입력값 “' + esc(c.typo.wrong) + '” ↔ 원본 서류 “' + esc(c.typo.right) + '” 불일치(담당자 오탈자)</div>' : '') +
