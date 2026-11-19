@@ -38,3 +38,6 @@ create table if not exists public.wf_approval_line(proc_id text not null referen
 alter table public.wf_approval_line enable row level security;
 drop policy if exists wf_line_read on public.wf_approval_line;
 create policy wf_line_read on public.wf_approval_line for select to anon, authenticated using (true);
+
+-- AI Double Check 점검 결과 (migrations/002_double_check.sql 과 같음)
+alter table public.wf_cases add column if not exists findings jsonb not null default '[]';
