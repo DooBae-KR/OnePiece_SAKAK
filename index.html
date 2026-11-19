@@ -123,9 +123,9 @@ function computeReasons(blind, docs, defs) {
   return { reasons: r, avg: avg };
 }
 const group = (c) => (c.status === '완료' || c.status === '반려') ? 'done' : (c.reasons && c.reasons.length ? 'review' : 'fit');
-const statusChip = (c) => {
+const statusChip = (c, forCitizen) => {
   const m = { '접수': 'blue', '체크완료': 'blue', 'AI심사': 'amber', 'VALI오류': 'red', '완료': 'green', '반려': 'red' };
-  return '<span class="chip ' + (m[c.status] || '') + '">' + esc(c.status === 'AI심사' ? '심사중' : c.status) + '</span>';
+  return '<span class="chip ' + (forCitizen && c.status === 'VALI오류' ? 'amber' : (m[c.status] || '')) + '">' + esc(c.status === 'AI심사' ? '심사중' : c.status === 'VALI오류' ? (forCitizen ? '최종 심사중' : '오류') : c.status) + '</span>';
 };
 
 /* ===== 렌더 ===== */
@@ -145,7 +145,7 @@ function viewCitizen() {
   const mine = S.cases.filter((c) => c.applicant_ref === ME.ref);
   const list = S.procs.filter((p) => S.cat === '전체' || p.cat === S.cat);
   return '<section class="card"><h2>내 신청 내역</h2>' + (mine.length ? mine.map((c) =>
-    '<div class="drow"><span class="grow"><b>' + esc((proc(c.proc_id) || {}).name) + '</b><br><span class="muted">신청일 ' + esc(String(c.created_at).slice(0, 10)) + '</span></span>' + statusChip(c) + '</div>').join('') :
+    '<div class="drow"><span class="grow"><b>' + esc((proc(c.proc_id) || {}).name) + '</b><br><span class="muted">신청일 ' + esc(String(c.created_at).slice(0, 10)) + '</span></span>' + statusChip(c, true) + '</div>').join('') :
     '<p class="muted">아직 신청한 내역이 없습니다. 아래에서 신청할 서비스를 고르세요.</p>') + '</section>' +
     '<section class="card"><h2>신청서 찾기</h2><div class="row" style="margin:10px 0">' + cats.map((c) =>
       '<button class="btn' + (S.cat === c ? ' pri' : '') + '" data-act="cat" data-v="' + esc(c) + '">' + esc(c) + '</button>').join('') + '</div>' +
