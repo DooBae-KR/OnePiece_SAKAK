@@ -19,3 +19,6 @@ node tests/review-workflow.test.js — 권한/단계 판정 테스트 19개 통�
 
 ## 추가 통합 검증 (모의 API)
 `node tests/review-integration.test.js` — 15개 통과. 실제 index.html의 JS와 권한 모듈을 모의 DOM 및 Supabase/AI 응답으로 실행했다. 실제 브라우저, 운영 DB, 실제 AI 판독은 아직 미검증이다. 실 DB 변경 없음.
+
+## 실제 API 연결 점검
+`python3 tests/live_api_smoke.py`로 Supabase 읽기 4종과 로컬 AI health 확인. 합성 PDF/TXT 및 해당 절차·서류 ID를 `--fixture`, `--proc-id`, `--doc-id`로 지정하면 엔진 POST 2종도 확인한다. 공유 DB 쓰기는 하지 않는다. 현재 실행 환경에서 DNS 해석 실패, 로컬 엔진 연결 거부로 실제 API 결과 미검증.
