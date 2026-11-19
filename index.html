@@ -38,7 +38,10 @@ h3{margin:0;font-size:15px}
 .btn.bl{background:#256EF4;border-color:#256EF4;color:#fff;min-width:110px}
 .tag{display:inline-block;padding:2px 12px;border:1px solid #9CA3AF;border-radius:999px;font-size:13px;margin-right:6px}
 .pill{min-height:40px;padding:0 14px;border:1px solid #D9DFEA;border-radius:999px;background:#fff;font-weight:700}
-.rank{min-height:44px;text-align:left;padding:0 12px;border:0;border-radius:8px;background:#F3F4F6;display:flex;align-items:center;gap:10px}
+.rank{min-height:48px;text-align:left;padding:0 16px;border:0;border-radius:8px;background:#F4F5F6;color:#1E2124;display:flex;align-items:center;gap:8px;width:100%;transition:all .15s}
+.rank .txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rank:hover,.rank:focus-visible{outline:1px solid #61666B;outline-offset:-1px}
+.rank:hover::after,.rank:focus-visible::after{content:'›';flex-shrink:0;font-size:22px;line-height:1;color:#1E2124}
 .stickybar{position:sticky;bottom:0;background:#fff;border-top:1px solid #D9DFEA;margin:16px -20px -16px;padding:12px 20px;border-radius:0 0 12px 12px}
 .detail{margin-top:10px;padding:12px;border:1px dashed #9CA3AF;border-radius:10px;background:#F9FAFB;display:flex;flex-direction:column;gap:8px}
 .drow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #E5E7EB}
@@ -178,7 +181,7 @@ function viewCitizen() {
       '<p class="muted" style="padding:20px 0">검색 결과가 없습니다. 다른 검색어로 찾아보세요.</p>') +
     '</section><aside>' +
     '<div class="card"><h3>최근에 본 서비스</h3><div class="row" style="margin-top:10px">' + (recent.length ? recent.map((p) => '<button class="pill" data-act="guide" data-v="' + p.id + '">' + esc(p.name) + '</button>').join('') : '<span class="muted">최근에 본 서비스가 없습니다.</span>') + '</div></div>' +
-    '<div class="card"><h3>인기 서비스</h3><div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">' + pop.map((p, n) => '<button class="rank" data-act="guide" data-v="' + p.id + '"><b>' + (n + 1) + '</b> ' + esc(p.name) + '</button>').join('') + '</div></div>' +
+    '<div class="card"><h3>인기 서비스</h3><div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">' + pop.map((p, n) => '<button class="rank" data-act="guide" data-v="' + p.id + '"><b>' + (n + 1) + '</b><span class="txt" title="' + esc(p.name) + '">' + esc(p.name) + '</span></button>').join('') + '</div></div>' +
     '</aside></div>';
 }
 
