@@ -1,0 +1,10 @@
+'use strict';
+const assert = require('node:assert/strict');
+const wf = require('../review-workflow.js');
+function runChecks(wf,assert){
+ const lines=[{seq:0,dept:"A"},{seq:1,dept:"B"},{seq:2,dept:"C"}],a={seq:0,dept:"A"},b={seq:1,dept:"B"},c={seq:2,dept:"C"},alien={seq:1,dept:"X"};
+ const issues=[{role:"접수",stage_seq:0,title:"입력",severity:"low"},{role:"심사",stage_seq:1,title:"소득",evidence:[{doc:"소득.pdf"}]},{role:"승인",stage_seq:2,title:"종합"}];const x={stage:1,status:"체크완료",findings:issues};
+ const checks=[["현재 심사 부서 열람",()=>wf.canAct(x,lines,b)],["타 부서 거부",()=>!wf.canList(x,lines,alien)],["미도달 승인 단계 숨김",()=>!wf.canList(x,lines,c)],["접수 단계는 진행 요약만",()=>wf.canList(x,lines,a)&&!wf.canAct(x,lines,a)&&wf.findings(x,lines,a).length===0],["심사 오류만 표시",()=>wf.findings(x,lines,b).length===1&&wf.findings(x,lines,b)[0].title==="소득"],["접수 참고 항목도 표시",()=>wf.findings({...x,stage:0,status:"접수"},lines,a)[0].severity==="low"],["증빙 참조 문서 허용",()=>wf.canDoc(x,lines,b,{doc_id:"d",fname:"소득.pdf"},{doc_id:"d",kind:"upload"})],["무관한 첨부 문서 차단",()=>!wf.canDoc(x,lines,b,{doc_id:"d",fname:"other.pdf"},{doc_id:"d",kind:"upload"})],["타 단계 문서 차단",()=>!wf.canDoc(x,lines,a,{doc_id:"d",fname:"소득.pdf"},{doc_id:"d",kind:"upload"})],["단계 0에서 1",()=>wf.next({...x,stage:0,status:"접수"},lines,a).stage===1],["단계 1에서 2",()=>wf.next(x,lines,b).status==="AI심사"],["승인 담당만 최종 완료",()=>wf.next({...x,stage:2,status:"AI심사"},lines,c).status==="완료"&&wf.next(x,lines,a)===null],["완료 이후 쓰기 차단",()=>!wf.canAct({...x,stage:2,status:"완료"},lines,c)],["오탈자 미해결 전달 차단",()=>wf.next({...x,typo:{right:"x"}},lines,b)===null],["분류 불일치 실패 처리",()=>wf.route({role:"접수",stage_seq:1})===null&&wf.next({...x,findings:[{role:"접수",stage_seq:1}]},lines,b)===null],["결재선 누락 차단",()=>wf.next({...x,stage:0,status:"접수"},[lines[0]],a)===null],["부정확 단계 값 차단",()=>!wf.canList({...x,stage:99},lines,b)],["AI 결과 포함 신청 직접 수정 제한",()=>!wf.canEdit({...x,stage:0,status:"접수"},lines,a)],["중복 결재부서/단계 제거",()=>wf.scopes({one:lines,two:lines}).length===3]];
+ for(const [name,fn] of checks)assert(fn(),name);return checks.map(x=>x[0]);
+}
+for (const name of runChecks(wf, assert.ok)) console.log('PASS '+name);
