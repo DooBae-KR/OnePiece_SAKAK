@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ERD - 복지행정 오류·사각지대 점검 프로토타입</title>
+<style>
+body{margin:0;font-family:"Pretendard","Noto Sans KR",system-ui,sans-serif;background:#F3F5F9;color:#111827;line-height:1.5}
+header{background:#0B2A5B;color:#fff;padding:14px 20px}
+header h1{margin:0;font-size:18px}
+main{max-width:1200px;margin:0 auto;padding:16px}
+.card{background:#fff;border:1px solid #D9DFEA;border-radius:12px;padding:16px 20px;margin-bottom:14px;overflow:auto}
+.note{font-size:14px;color:#374151}
+.note li{margin:4px 0}
+</style>
+</head>
+<body>
+<header><h1>ERD · Supabase wf_ 테이블 (시연용 합성 데이터)</h1></header>
+<main>
+<div class="card"><div class="mermaid" id="erd">
+erDiagram
+    wf_procedures ||--o{ wf_proc_docs : "필요 서류 정의"
+    wf_procedures ||--o{ wf_approval_line : "결재선(3단계)"
+    wf_procedures ||--o{ wf_cases : "신청"
+    wf_cases ||--o{ wf_case_docs : "제출 서류"
+    wf_cases ||--o{ wf_view_log : "열람·열람요청 기록"
+
+    wf_procedures {
+        text id PK
+        text title
+        text dept "담당 부서"
+        text form_name
+        text cat
+        text name
+        text descr
+        text target
+        text how_to
+        jsonb notes
+        int sort
+    }
+    wf_proc_docs {
+        text proc_id PK,FK
+        text doc_id PK
+        text name
+        text kind "manual / gov24 / upload"
+        text req
+        int good "시연용 기준 점수"
+        jsonb keys "파일명 키워드"
+        text diff "정부24 불일치 예시"
+        int sort
+    }
+    wf_approval_line {
+        text proc_id PK,FK
+        int seq PK "0=A 1=B 2=C"
+        text label
+        text dept
+    }
+    wf_cases {
+        text id PK
+        text proc_id FK
+        text applicant_name
+        text applicant_ref
+        date birth
+        text form_name
+        text blind "사각지대 메모"
+        int avg
+        text status "접수/체크완료/AI심사/VALI오류/완료/반려"
+        jsonb reasons
+        jsonb typo
+        int stage "현재 결재 단계"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    wf_case_docs {
+        text case_id PK,FK
+        text doc_id PK "wf_proc_docs.doc_id (FK 없음)"
+        int sim
+        text state "ok/wrong/mismatch/missing"
+        text fname
+        jsonb signs "위조 의심 징후"
+    }
+    wf_view_log {
+        bigint id PK
+        text case_id "FK 없음"
+        text doc_id
+        text dept
+        timestamptz viewed_at
+    }
+</div></div>
+<div class="card note"><b>참고</b>
+<ul>
+<li><code>wf_case_docs.doc_id</code>는 <code>wf_proc_docs(proc_id, doc_id)</code>를 논리적으로 가리키지만 FK로 걸려 있지 않습니다.</li>
+<li><code>wf_view_log.case_id</code>도 FK가 없습니다. 신청 건을 삭제해도 열람 기록은 남습니다.</li>
+<li>모든 데이터는 시연용 합성 데이터입니다.</li>
+</ul></div>
+</main>
+<script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+mermaid.initialize({ startOnLoad: true, theme: "default", securityLevel: "loose" });
+</script>
+</body>
+</html>
