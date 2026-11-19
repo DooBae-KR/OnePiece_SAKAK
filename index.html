@@ -96,11 +96,14 @@ const S = {
 
 /* ===== 데이터 ===== */
 async function loadAll() {
-  const [procs, pdocs, cases] = await Promise.all([
+  const [procs, pdocs, cases, lines] = await Promise.all([
     api('wf_procedures?select=*&order=sort'),
     api('wf_proc_docs?select=*&order=sort'),
-    api('wf_cases?select=*,wf_case_docs(*)&order=created_at.desc')
+    api('wf_cases?select=*,wf_case_docs(*)&order=created_at.desc'),
+    api('wf_approval_line?select=*&order=seq')
   ]);
+  S.lines = {};
+  lines.forEach((l) => { (S.lines[l.proc_id] = S.lines[l.proc_id] || []).push(l); });
   S.procs = procs;
   S.pdocs = {};
   pdocs.forEach((d) => { (S.pdocs[d.proc_id] = S.pdocs[d.proc_id] || []).push(d); });
@@ -156,19 +159,19 @@ const myCases = () => S.cases.filter((c) => c.applicant_ref === ME.ref);
 function citizenNav() {
   return '<div class="row"><button class="btn' + (S.step === 'list' ? ' pri' : '') + '" data-act="home">신청서 찾기</button><button class="btn' + (S.step === 'mine' ? ' pri' : '') + '" data-act="mine">내 신청함 ' + myCases().length + '건</button></div>';
 }
-function stageOf(c) {
-  const m = { '접수': 0, '체크완료': 1, 'AI심사': 2, 'VALI오류': 2, '완료': 3, '반려': 3 };
-  return m[c.status] == null ? 0 : m[c.status];
+function approverState(c, i) {
+  if (c.status === '완료') return '심사완료';
+  const at = c.stage || 0;
+  if (i < at) return '심사완료';
+  if (i === at) return c.status === '반려' ? '반려' : '심사중';
+  return '심사대기';
 }
 function stepper(c) {
-  const rej = c.status === '반려'; const at = stageOf(c);
-  const labels = ['접수', '서류 확인', '심사', rej ? '반려' : '처리 완료'];
-  return '<div class="row" style="gap:6px;margin:10px 0" aria-label="진행 상태">' + labels.map((l, i) => {
-    const done = i < at || (i === at && (c.status === '완료' || rej));
-    const cur = i === at && !done;
-    const bg = rej && i === 3 ? '#FEE2E2' : done ? '#D1FAE5' : cur ? '#FEF3C7' : '#F3F4F6';
-    const fg = rej && i === 3 ? '#991B1B' : done ? '#065F46' : cur ? '#92400E' : '#6B7280';
-    return '<span style="padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:' + bg + ';color:' + fg + '">' + (done && !rej ? '✓ ' : '') + l + '</span>' + (i < 3 ? '<span class="muted">›</span>' : '');
+  const line = (S.lines && S.lines[c.proc_id]) || [];
+  const col = { '심사완료': ['#D1FAE5', '#065F46'], '심사중': ['#FEF3C7', '#92400E'], '심사대기': ['#F3F4F6', '#4B5563'], '반려': ['#FEE2E2', '#991B1B'] };
+  return '<div class="row" style="gap:6px;margin:10px 0;align-items:stretch" aria-label="결재 진행">' + line.map((l, i) => {
+    const st = approverState(c, i); const cc = col[st];
+    return '<div style="flex:1 1 150px;min-width:140px;padding:8px 10px;border-radius:10px;border:1px solid #D9DFEA;background:' + cc[0] + '"><div style="font-size:12px;font-weight:700;color:#374151">' + esc(l.label) + '</div><div style="font-size:13px;color:#111827">' + esc(l.dept) + '</div><div style="font-size:13px;font-weight:800;color:' + cc[1] + '">' + (st === '심사완료' ? '✓ ' : '') + st + '</div></div>' + (i < line.length - 1 ? '<span class="muted" style="align-self:center">→</span>' : '');
   }).join('') + '</div>';
 }
 function viewMine() {
@@ -310,10 +313,10 @@ async function submitCase() {
 }
 
 async function approve(id) {
-  await patch(id, { status: 'AI심사' }); await refresh(); render();
+  await patch(id, { status: 'AI심사', stage: 2 }); await refresh(); render();
   await sleep(1300);
   const c = S.cases.find((x) => x.id === id);
-  await patch(id, { status: c && c.typo ? 'VALI오류' : '완료' }); await refresh();
+  await patch(id, { status: c && c.typo ? 'VALI오류' : '완료', stage: 2 }); await refresh();
 }
 
 async function saveForm(id) {
@@ -353,7 +356,7 @@ document.addEventListener('click', (ev) => {
   else if (a === 'detail') { S.openId = S.openId === v ? null : v; render(); }
   else if (a === 'batch') run(async () => {
     const targets = S.cases.filter((c) => S.procs.some((p) => p.id === c.proc_id && p.dept === S.dept) && c.status === '접수');
-    for (const c of targets) await patch(c.id, { status: '체크완료' });
+    for (const c of targets) await patch(c.id, { status: '체크완료', stage: 1 });
     S.toast = '일괄체크 완료: ' + targets.length + '건을 점검했습니다. 사각지대·서류 오류가 있는 건은 “검토 필요”에 남습니다.'; await refresh();
   });
   else if (a === 'approve') run(() => approve(v));

@@ -116,3 +116,11 @@ insert into public.wf_case_docs values
 ('s1_c1','s1d3',97,'ok',null,null),('s1_c1','s1d4',95,'ok',null,null),('s1_c1','s1d5',96,'ok',null,null),('s1_c1','s1d6',94,'ok',null,null),
 ('s2_c1','s2d3',96,'ok',null,null),('s2_c1','s2d4',95,'ok',null,null),('s2_c1','s2d5',94,'ok',null,null),('s2_c1','s2d6',97,'ok',null,null),('s2_c1','s2d7',95,'ok',null,null),
 ('s3_c1','s3d3',95,'ok',null,null),('s3_c1','s3d4',96,'ok',null,null),('s3_c1','s3d5',94,'ok',null,null),('s3_c1','s3d6',93,'ok',null,null);
+
+-- 결재선(가데이터) 및 단계 (0=A 심사중, 1=B 심사중, 2=C 심사중)
+insert into public.wf_approval_line values
+('s1',0,'결재자 A','주민센터 복지팀'),('s1',1,'결재자 B','시청 복지정책과'),('s1',2,'결재자 C','시청 복지국'),
+('s2',0,'결재자 A','건강보험공단 장기요양운영센터'),('s2',1,'결재자 B','건강보험공단 지사 요양심사팀'),('s2',2,'결재자 C','건강보험공단 본부 장기요양급여부'),
+('s3',0,'결재자 A','국민연금공단 유족연금팀'),('s3',1,'결재자 B','국민연금공단 연금급여심사팀'),('s3',2,'결재자 C','국민연금공단 본부 급여부')
+on conflict do nothing;
+update public.wf_cases set stage = case status when '체크완료' then 1 when 'AI심사' then 2 when 'VALI오류' then 2 when '완료' then 2 else 0 end;

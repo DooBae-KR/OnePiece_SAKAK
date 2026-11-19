@@ -31,3 +31,10 @@ create policy wf_cdocs_all on public.wf_case_docs for all to anon, authenticated
 create policy wf_log_ins on public.wf_view_log for insert to anon, authenticated with check (true);
 create policy wf_log_sel on public.wf_view_log for select to anon, authenticated using (true);
 comment on table public.wf_cases is '시연용 합성 신청 카드. 실제 개인정보를 넣지 않는다.';
+
+-- 결재선(3단계) 및 진행 단계
+alter table public.wf_cases add column if not exists stage int not null default 0;
+create table if not exists public.wf_approval_line(proc_id text not null references public.wf_procedures(id) on delete cascade, seq int not null, label text not null, dept text not null, primary key(proc_id, seq));
+alter table public.wf_approval_line enable row level security;
+drop policy if exists wf_line_read on public.wf_approval_line;
+create policy wf_line_read on public.wf_approval_line for select to anon, authenticated using (true);
