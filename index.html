@@ -85,6 +85,13 @@ label{display:block;font-size:13px;font-weight:700;margin:8px 0 4px}
 .noprint{}
 @media print{body{display:none}}
 .loading{padding:40px;text-align:center;color:#4B5563}
+.dc{margin-top:10px;border:1px solid #D9DFEA;border-radius:10px;overflow:hidden}
+.dc-head{background:#0B2A5B;color:#fff;padding:8px 12px;font-size:13px;font-weight:700;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.dc-stage{padding:8px 12px;border-top:1px solid #E5E7EB}
+.dc-stage.now{background:#FFFBEB}
+.dc-item{padding:8px 0;border-top:1px dashed #E5E7EB;font-size:14px}
+.dc-item:first-of-type{border-top:0}
+.dc-ev{font-size:12px;color:#374151;background:#F3F4F6;border-radius:6px;padding:4px 8px;margin-top:4px;word-break:break-all}
 @media (max-width:700px){main{padding:10px}.card{padding:14px}.btn{flex:1 1 auto}}
 </style>
 </head>
@@ -110,6 +117,11 @@ const SUPABASE_KEY = 'sb_publishable_8fv7f3vSQoDK67lsflICeA__wgFlpCa';
 const ME = { ref: 'citizen-0001', name: '홍길동(합성)', birth: '1980-01-01', phone: '010-****-5678', email: 'hong***@example.com', consent: { sms: true, email: true } };
 const WRONG_MSG = '첨부한 서류가 해당 서류와 맞지 않습니다. 올바른 서류를 첨부해 주세요.';
 const KIND = { manual: '현장 작성', gov24: '정부24 연계', upload: '직접 첨부' };
+/* AI Double Check 판독 엔진 (welfare_ai/src/server.py). 켜져 있으면 파일 내용을 실제로 판독하고,
+   꺼져 있으면 기존 시연 방식(파일 이름 키워드)으로 동작한다. */
+const ENGINE_URL = 'http://127.0.0.1:8787';
+const ROLE_SEQ = { '접수': 0, '심사': 1, '승인': 2 };
+const SEV = { high: ['red', '높음'], medium: ['amber', '중간'], low: ['', '낮음'], info: ['', '참고'] };
 
 async function api(path, opt) {
   opt = opt || {};
@@ -121,6 +133,20 @@ async function api(path, opt) {
   if (!res.ok) { throw new Error('DB 오류 ' + res.status + ': ' + (await res.text()).slice(0, 200)); }
   return res.status === 204 ? null : res.json();
 }
+async function engine(path, body) {
+  const res = await fetch(ENGINE_URL + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(j.error || ('판독 엔진 오류 ' + res.status));
+  return j;
+}
+async function checkEngine() {
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 1500);
+    const r = await fetch(ENGINE_URL + '/api/health', { signal: ctl.signal }); clearTimeout(t);
+    S.engine = r.ok ? await r.json() : false;
+  } catch (e) { S.engine = false; }
+}
+const toB64 = (file) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1] || ''); r.onerror = () => no(new Error('파일을 읽지 못했습니다.')); r.readAsDataURL(file); });
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtDate = (t) => { if (!t) return '-'; const d = new Date(t); if (isNaN(d)) return '-'; return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const $ = (id) => document.getElementById(id);
@@ -128,7 +154,7 @@ const $ = (id) => document.getElementById(id);
 const S = {
   role: 'citizen', step: 'list', cat: '전체', procId: null, dept: null,
   procs: [], pdocs: {}, cases: [], openId: null, toast: '', busy: false,
-  att: {}, attCount: {}, attMsg: {}, modal: null
+  att: {}, attCount: {}, attMsg: {}, modal: null, engine: false
 };
 
 /* ===== 데이터 ===== */
@@ -228,7 +254,8 @@ function renderBot() {
 function render() {
   $('tab-citizen').classList.toggle('on', S.role === 'citizen');
   $('tab-staff').classList.toggle('on', S.role === 'staff');
-  $('who').textContent = S.role === 'citizen' ? '기안자: ' + ME.name + ' · 생년월일 ' + ME.birth + ' · 모든 데이터는 시연용 합성 데이터입니다' : '담당자 화면 · 접속 부서: ' + (S.dept || '-') + ' · 모든 데이터는 시연용 합성 데이터입니다';
+  $('who').textContent = (S.role === 'citizen' ? '기안자: ' + ME.name + ' · 생년월일 ' + ME.birth + ' · 모든 데이터는 시연용 합성 데이터입니다' : '담당자 화면 · 접속 부서: ' + (S.dept || '-') + ' · 모든 데이터는 시연용 합성 데이터입니다') +
+    ' · 서류 판독: ' + (S.engine ? 'AI Double Check 엔진 연결됨' + (S.engine.ai ? ' (AI 판독)' : ' (규칙 판독)') : '시연 모드(파일 이름 키워드)');
   const app = $('app');
   app.innerHTML = (S.toast ? '<div class="notice info" role="status">' + esc(S.toast) + '</div>' : '') + (S.role === 'citizen' ? viewCitizen() : viewStaff());
   $('modal-root').innerHTML = S.modal ? viewModal() : '';
@@ -331,7 +358,7 @@ function viewApply() {
   const need = nonManual(p.id);
   const okAll = need.every((d) => S.att[d.doc_id] && S.att[d.doc_id].state !== 'wrong');
   return '<section class="card"><button class="btn" data-act="guide" data-v="' + p.id + '">← 신청 안내</button><h2 style="margin-top:12px">' + esc(p.form_name) + ' 기안</h2>' +
-    '<p class="muted">서류를 첨부하면 서류 종류가 맞는지와 정부24 연계 값을 확인합니다. 시연에서는 파일 이름의 키워드로 판정합니다. (예: “이직”, “통장”, “임대”)</p>' +
+    '<p class="muted">서류를 첨부하면 서류 종류가 맞는지와 정부24 연계 값을 확인합니다. ' + (S.engine ? '판독 엔진이 서류 내용을 읽어 판정합니다. (PDF·텍스트 파일)' : '시연에서는 파일 이름의 키워드로 판정합니다. (예: “이직”, “통장”, “임대”)') + '</p>' +
     docs.map((d) => {
       if (d.kind === 'manual') return '<div class="drow"><span class="grow">' + esc(d.name) + '</span><span class="chip amber">현장 방문 작성</span></div>';
       const a = S.att[d.doc_id]; const msg = S.attMsg[d.doc_id];
@@ -363,7 +390,8 @@ function card(c) {
   const grp = group(c);
   return '<div style="border-top:1px solid #E5E7EB;padding:12px 0"><div class="row"><span class="grow"><b>' + esc(c.form_name) + '</b><br>기안자 ' + esc(c.applicant_name) + ' · 생년월일 ' + esc(c.birth || '-') + '</span>' +
     '<span style="text-align:right">' + statusChip(c) + '<br><span class="muted">' + fmtDate(c.created_at) + '</span></span></div>' +
-    (grp === 'review' ? '<ul style="margin:8px 0 0;padding-left:20px;color:#7F1D1D">' + c.reasons.map((r) => '<li>' + esc(r) + '</li>').join('') + '</ul>' : '') +
+    (grp === 'review' && !(c.findings && c.findings.length) ? '<ul style="margin:8px 0 0;padding-left:20px;color:#7F1D1D">' + c.reasons.map((r) => '<li>' + esc(r) + '</li>').join('') + '</ul>' : '') +
+    (c.findings && c.findings.length ? dcPanel(c) : '') +
     (c.status === 'VALI오류' && c.typo ? '<div class="notice err" style="margin-top:8px" role="alert">VALI 체크: ' + esc(c.typo.field) + ' 입력값 “' + esc(c.typo.wrong) + '” ↔ 원본 서류 “' + esc(c.typo.right) + '” 불일치(담당자 오탈자)</div>' : '') +
     '<div class="row" style="margin-top:8px"><button class="btn" data-act="detail" data-v="' + c.id + '">' + (open ? '매칭정보 닫기' : '매칭정보 보기') + '</button>' +
     (grp !== 'done' && c.status !== 'AI심사' && c.status !== 'VALI오류' ? '<button class="btn ok" data-act="approve" data-v="' + c.id + '">승인</button><button class="btn bad" data-act="reject" data-v="' + c.id + '">반려</button>' : '') +
@@ -375,6 +403,25 @@ function card(c) {
         (d.state === 'mismatch' && df.diff ? '<br><span class="muted">' + esc(df.diff) + '</span>' : '') + '</span>' +
         '<button class="btn" data-act="view" data-c="' + c.id + '" data-v="' + d.doc_id + '">서류 열람</button></div>';
     }).join('') : '<span class="muted">첨부 서류 정보가 없습니다.</span>') + '</div>' : '') + '</div>';
+}
+
+/* AI Double Check 점검 결과: 결재선 단계(A 접수 · B 심사 · C 승인)별로 나눠, 지금 단계를 강조한다 */
+function dcPanel(c) {
+  const line = (S.lines && S.lines[c.proc_id]) || [];
+  const fs = c.findings.filter((f) => f.severity !== 'low' && f.severity !== 'info');
+  const low = c.findings.length - fs.length;
+  const now = c.stage || 0;
+  const stages = [0, 1, 2].map((i) => {
+    const mine = fs.filter((f) => (f.stage_seq != null ? f.stage_seq : ROLE_SEQ[f.role]) === i);
+    const l = line[i] || { label: '결재자 ' + 'ABC'[i], dept: '' };
+    return '<div class="dc-stage' + (i === now && c.status !== '완료' && c.status !== '반려' ? ' now' : '') + '"><b>' + esc(l.label) + ' · ' + ['접수', '심사', '승인'][i] + '</b> <span class="muted">' + esc(l.dept) + '</span> ' +
+      (mine.length ? '<span class="chip red">확인 ' + mine.length + '건</span>' : '<span class="chip green">확인 사항 없음</span>') +
+      mine.map((f) => '<div class="dc-item"><span class="chip ' + (SEV[f.severity] || SEV.info)[0] + '">' + (SEV[f.severity] || SEV.info)[1] + '</span> <b>' + esc(f.title) + '</b><div class="muted">' + esc(f.detail) + '</div>' +
+        (f.evidence || []).slice(0, 2).map((e) => '<div class="dc-ev">근거 · ' + esc(e.doc) + ' · ' + esc(e.field) + ': “' + esc(e.excerpt) + '”</div>').join('') +
+        (f.gov ? '<div class="dc-ev">원본 · ' + esc(f.gov.source) + ': ' + esc(f.gov.value) + '</div>' : '') +
+        (f.action ? '<div class="muted" style="margin-top:2px">조치: ' + esc(f.action) + '</div>' : '') + '</div>').join('') + '</div>';
+  }).join('');
+  return '<div class="dc"><div class="dc-head">AI Double Check 점검 결과 <span class="chip">' + fs.length + '건</span>' + (low ? '<span style="font-weight:400">· 참고 ' + low + '건(현장 작성 서류 등) 생략</span>' : '') + '</div>' + stages + '</div>';
 }
 
 function viewModal() {
@@ -418,6 +465,17 @@ async function patch(id, body) { await api('wf_cases?id=eq.' + encodeURIComponen
 
 async function attachFile(docId, file) {
   const p = proc(S.procId); const d = (S.pdocs[p.id] || []).find((x) => x.doc_id === docId);
+  if (S.engine) {
+    S.attMsg[docId] = '판독 중…'; render();
+    try {
+      const data = await toB64(file);
+      const r = await engine('/api/check-doc', { proc_id: p.id, doc_id: docId, filename: file.name, data: data });
+      S.att[docId] = { fname: file.name, sim: r.sim, state: r.state, data: data };
+      S.attMsg[docId] = r.state === 'wrong' ? WRONG_MSG + (r.detected_type ? ' (판독 결과: ' + r.detected_type + ')' : '') :
+        (r.suspicious && r.suspicious.length ? '서류 안에 판독을 조작하려는 듯한 문장이 있어 담당자가 확인합니다.' : '');
+    } catch (e) { S.att[docId] = null; S.attMsg[docId] = e.message; }
+    return;
+  }
   const fname = file.name; const hit = (d.keys || []).some((k) => fname.indexOf(k) >= 0);
   S.attCount[docId] = (S.attCount[docId] || 0) + 1;
   let sim, state, msg = '';
@@ -427,9 +485,31 @@ async function attachFile(docId, file) {
   S.att[docId] = { fname, sim, state }; S.attMsg[docId] = msg;
 }
 
+function findingReasons(fs) {
+  return fs.filter((f) => f.severity === 'high' || f.severity === 'medium').map((f) => '[' + f.role + '] ' + f.title);
+}
+async function insertCase(body) {
+  try { await api('wf_cases', { method: 'POST', body: body }); }
+  catch (e) {  // DB에 findings 칸이 아직 없으면(002 마이그레이션 전) 결과 없이 저장하고 알린다
+    if (body.findings && /findings/.test(e.message)) { const b = Object.assign({}, body); delete b.findings; await api('wf_cases', { method: 'POST', body: b }); S.noFindingsCol = true; }
+    else throw e;
+  }
+}
 async function submitCase() {
   const p = proc(S.procId); const need = nonManual(p.id);
   S.busy = true; render();
+  if (S.engine) {
+    const docs = {}; need.forEach((d) => { const a = S.att[d.doc_id]; if (a && a.data) docs[d.doc_id] = { filename: a.fname, data: a.data }; });
+    let res;
+    try { res = await engine('/api/check-case', { proc_id: p.id, docs: docs }); } finally { S.busy = false; }
+    const rows = need.map((d) => ({ doc_id: d.doc_id, sim: (res.docs[d.doc_id] || {}).sim || 0, state: (res.docs[d.doc_id] || {}).state || 'missing', fname: S.att[d.doc_id] ? S.att[d.doc_id].fname : null }));
+    const id = 'app_' + Date.now().toString(36);
+    await insertCase({ id: id, proc_id: p.id, applicant_name: ME.name, applicant_ref: ME.ref, birth: ME.birth, form_name: p.form_name, blind: '', avg: avgOf(rows.map((x) => x.sim)), reasons: findingReasons(res.findings), findings: res.findings });
+    await api('wf_case_docs', { method: 'POST', body: rows.map((x) => Object.assign({ case_id: id }, x)) });
+    S.att = {}; S.attCount = {}; S.attMsg = {}; S.step = 'mine'; S.myOpen = id;
+    S.toast = '기안이 제출되었습니다. 서류 점검 결과는 담당자가 확인합니다.' + (S.noFindingsCol ? ' (DB에 점검 결과 칸이 없어 요약만 저장했습니다: sql/002 적용 필요)' : '');
+    await refresh(); return;
+  }
   const rows = need.map((d) => ({ doc_id: d.doc_id, sim: S.att[d.doc_id].sim, state: S.att[d.doc_id].state === 'mismatch' ? 'mismatch' : 'ok', fname: S.att[d.doc_id].fname }));
   const r = computeReasons('', rows, need);
   const id = 'app_' + Date.now().toString(36);
@@ -523,6 +603,7 @@ document.addEventListener('keydown', (ev) => { if (ev.target && ev.target.id ===
 document.addEventListener('copy', (ev) => { if (S.modal && S.modal.type === 'view') ev.preventDefault(); });
 
 (async function init() {
+  await checkEngine();
   try { await loadAll(); } catch (e) { $('app').innerHTML = '<div class="notice err">DB에 연결하지 못했습니다. ' + esc(e.message) + '</div>'; return; }
   render();
 })();

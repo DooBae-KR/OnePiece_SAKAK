@@ -51,6 +51,7 @@ erDiagram
         jsonb reasons
         jsonb typo
         int stage "현재 결재 단계"
+        jsonb findings "AI Double Check 점검 결과(담당·근거·원본값)"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -72,6 +73,7 @@ erDiagram
 ```
 
 ## 참고
+- `wf_cases.findings`의 각 항목: `role`(접수|심사|승인), `stage_seq`(결재자 0=A·1=B·2=C), `severity`, `title`, `detail`, `evidence[]`(서류·항목·원문), `gov`(원본 출처·값), `action`.
 - `wf_case_docs.doc_id`는 `wf_proc_docs(proc_id, doc_id)`를 논리적으로 가리키지만 FK로 걸려 있지 않습니다.
 - `wf_view_log.case_id`도 FK가 없습니다. 신청 건을 삭제해도 열람 기록은 남습니다.
 - 모든 데이터는 시연용 합성 데이터입니다.
