@@ -141,15 +141,48 @@ function render() {
 function viewCitizen() {
   if (S.step === 'guide') return viewGuide();
   if (S.step === 'apply') return viewApply();
+  if (S.step === 'mine') return citizenNav() + viewMine();
   const cats = ['전체'].concat(Array.from(new Set(S.procs.map((p) => p.cat))));
   const mine = S.cases.filter((c) => c.applicant_ref === ME.ref);
   const list = S.procs.filter((p) => S.cat === '전체' || p.cat === S.cat);
-  return '<section class="card"><h2>내 신청 내역</h2>' + (mine.length ? mine.map((c) =>
-    '<div class="drow"><span class="grow"><b>' + esc((proc(c.proc_id) || {}).name) + '</b><br><span class="muted">신청일 ' + esc(String(c.created_at).slice(0, 10)) + '</span></span>' + statusChip(c, true) + '</div>').join('') :
-    '<p class="muted">아직 신청한 내역이 없습니다. 아래에서 신청할 서비스를 고르세요.</p>') + '</section>' +
+  return citizenNav() +
     '<section class="card"><h2>신청서 찾기</h2><div class="row" style="margin:10px 0">' + cats.map((c) =>
       '<button class="btn' + (S.cat === c ? ' pri' : '') + '" data-act="cat" data-v="' + esc(c) + '">' + esc(c) + '</button>').join('') + '</div>' +
     '<div class="grid">' + list.map((p) => '<div class="card pcard"><span class="chip blue">' + esc(p.cat) + '</span><h3>' + esc(p.name) + '</h3><span class="muted">' + esc(p.descr) + '</span><span class="muted">담당: ' + esc(p.dept) + '</span><button class="btn pri" data-act="guide" data-v="' + p.id + '">신청</button></div>').join('') + '</div></section>';
+}
+
+
+const myCases = () => S.cases.filter((c) => c.applicant_ref === ME.ref);
+function citizenNav() {
+  return '<div class="row"><button class="btn' + (S.step === 'list' ? ' pri' : '') + '" data-act="home">신청서 찾기</button><button class="btn' + (S.step === 'mine' ? ' pri' : '') + '" data-act="mine">내 신청함 ' + myCases().length + '건</button></div>';
+}
+function stageOf(c) {
+  const m = { '접수': 0, '체크완료': 1, 'AI심사': 2, 'VALI오류': 2, '완료': 3, '반려': 3 };
+  return m[c.status] == null ? 0 : m[c.status];
+}
+function stepper(c) {
+  const rej = c.status === '반려'; const at = stageOf(c);
+  const labels = ['접수', '서류 확인', '심사', rej ? '반려' : '처리 완료'];
+  return '<div class="row" style="gap:6px;margin:10px 0" aria-label="진행 상태">' + labels.map((l, i) => {
+    const done = i < at || (i === at && (c.status === '완료' || rej));
+    const cur = i === at && !done;
+    const bg = rej && i === 3 ? '#FEE2E2' : done ? '#D1FAE5' : cur ? '#FEF3C7' : '#F3F4F6';
+    const fg = rej && i === 3 ? '#991B1B' : done ? '#065F46' : cur ? '#92400E' : '#6B7280';
+    return '<span style="padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:' + bg + ';color:' + fg + '">' + (done && !rej ? '✓ ' : '') + l + '</span>' + (i < 3 ? '<span class="muted">›</span>' : '');
+  }).join('') + '</div>';
+}
+function viewMine() {
+  const list = myCases();
+  return '<section class="card"><div class="row"><h2 class="grow">내 신청함</h2><button class="btn" data-act="reload">새로고침</button></div><p class="muted">내가 신청한 신청서와 진행 상태를 확인할 수 있습니다.</p>' +
+    (list.length ? list.map((c) => {
+      const p = proc(c.proc_id) || {}; const open = S.myOpen === c.id; const defs = S.pdocs[c.proc_id] || [];
+      const docs = (c.wf_case_docs || []);
+      return '<div style="border-top:1px solid #E5E7EB;padding:12px 0"><div class="row"><span class="grow"><b>' + esc(c.form_name) + '</b><br><span class="muted">' + esc(p.name) + ' · 담당 ' + esc(p.dept) + '</span></span>' +
+        '<span style="text-align:right">' + statusChip(c, true) + '<br><span class="muted">' + fmtDate(c.created_at) + '</span></span></div>' + stepper(c) +
+        '<div class="row"><button class="btn" data-act="mdetail" data-v="' + c.id + '">' + (open ? '신청서 닫기' : '신청서 보기') + '</button></div>' +
+        (open ? '<div class="detail"><div><b>신청서</b></div><div class="muted">신청 서비스: ' + esc(p.name) + '<br>신청서명: ' + esc(c.form_name) + '<br>기안자: ' + esc(c.applicant_name) + ' · 생년월일 ' + esc(c.birth || '-') + '<br>신청일자: ' + fmtDate(c.created_at) + '<br>담당 부서: ' + esc(p.dept) + '</div>' +
+          '<div style="margin-top:6px"><b>제출한 서류</b></div>' + (docs.length ? docs.map((d) => { const df = defs.find((x) => x.doc_id === d.doc_id) || {}; return '<div class="drow"><span class="grow">' + esc(df.name) + '</span><span class="chip">' + KIND[df.kind] + '</span><span class="chip green">제출 완료</span></div>'; }).join('') : '<span class="muted">제출한 서류가 없습니다.</span>') + '</div>' : '') + '</div>';
+    }).join('') : '<p class="muted">아직 신청한 내역이 없습니다. “신청서 찾기”에서 신청해 보세요.</p>') + '</section>';
 }
 
 function viewGuide() {
@@ -271,8 +304,8 @@ async function submitCase() {
   const id = 'app_' + Date.now().toString(36);
   await api('wf_cases', { method: 'POST', body: { id: id, proc_id: p.id, applicant_name: ME.name, applicant_ref: ME.ref, birth: ME.birth, form_name: p.form_name, blind: '', avg: r.avg, reasons: r.reasons } });
   await api('wf_case_docs', { method: 'POST', body: rows.map((x) => Object.assign({ case_id: id }, x)) });
-  S.att = {}; S.attCount = {}; S.attMsg = {}; S.busy = false; S.step = 'list';
-  S.toast = '기안이 제출되었습니다. 담당자 결재함(“' + p.dept + '”)에서 확인할 수 있습니다.';
+  S.att = {}; S.attCount = {}; S.attMsg = {}; S.busy = false; S.step = 'mine'; S.myOpen = id;
+  S.toast = '기안이 제출되었습니다. 진행 상태는 “내 신청함”에서 확인할 수 있습니다.';
   await refresh();
 }
 
@@ -310,6 +343,9 @@ document.addEventListener('click', (ev) => {
   if (a === 'role') { S.role = v; render(); }
   else if (a === 'cat') { S.cat = v; render(); }
   else if (a === 'home') { S.step = 'list'; render(); }
+  else if (a === 'mine') run(async () => { S.step = 'mine'; S.myOpen = null; await refresh(); });
+  else if (a === 'reload') run(refresh);
+  else if (a === 'mdetail') { S.myOpen = S.myOpen === v ? null : v; render(); }
   else if (a === 'guide') { S.procId = v; S.step = 'guide'; render(); }
   else if (a === 'apply') { S.att = {}; S.attCount = {}; S.attMsg = {}; S.step = 'apply'; render(); }
   else if (a === 'submit') run(submitCase);

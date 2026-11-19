@@ -106,3 +106,13 @@ update public.wf_cases c set created_at = v.d::timestamptz, updated_at = v.d::ti
 ('s2_c2','2026-11-04 13:00+09'),('s2_c3','2026-11-06 15:45+09'),('s2_c4','2026-11-10 10:10+09'),('s2_c5','2026-11-13 09:25+09'),('s2_c6','2026-11-17 14:50+09'),
 ('s3_c2','2026-11-02 11:30+09'),('s3_c3','2026-11-07 10:00+09'),('s3_c4','2026-11-11 13:40+09'),('s3_c5','2026-11-14 16:10+09'),('s3_c6','2026-11-18 09:55+09')
 ) as v(id,d) where c.id = v.id;
+
+-- 기안자(홍길동) 신청함 시연용 데이터
+insert into public.wf_cases(id,proc_id,applicant_name,applicant_ref,birth,form_name,blind,avg,status,reasons,typo,created_at,updated_at) values
+('s1_c1','s1','홍길동(합성)','citizen-0001','1980-01-01','긴급복지지원(기초생활보장) 신청서','',95,'완료','[]'::jsonb,null,'2026-10-28 10:00+09','2026-10-30 15:00+09'),
+('s2_c1','s2','홍길동(합성)','citizen-0001','1980-01-01','노인장기요양 인정 신청서','',96,'VALI오류','[]'::jsonb,'{"k":"c1","field":"이름","wrong":"홍길둥","right":"홍길동"}'::jsonb,'2026-11-15 11:20+09','2026-11-15 11:20+09'),
+('s3_c1','s3','홍길동(합성)','citizen-0001','1980-01-01','유족연금(사망일시금) 청구서','',94,'체크완료','[]'::jsonb,null,'2026-11-18 09:30+09','2026-11-18 09:30+09');
+insert into public.wf_case_docs values
+('s1_c1','s1d3',97,'ok',null,null),('s1_c1','s1d4',95,'ok',null,null),('s1_c1','s1d5',96,'ok',null,null),('s1_c1','s1d6',94,'ok',null,null),
+('s2_c1','s2d3',96,'ok',null,null),('s2_c1','s2d4',95,'ok',null,null),('s2_c1','s2d5',94,'ok',null,null),('s2_c1','s2d6',97,'ok',null,null),('s2_c1','s2d7',95,'ok',null,null),
+('s3_c1','s3d3',95,'ok',null,null),('s3_c1','s3d4',96,'ok',null,null),('s3_c1','s3d5',94,'ok',null,null),('s3_c1','s3d6',93,'ok',null,null);
