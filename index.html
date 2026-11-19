@@ -198,7 +198,7 @@ function card(c) {
   const open = S.openId === c.id;
   const grp = group(c);
   return '<div style="border-top:1px solid #E5E7EB;padding:12px 0"><div class="row"><span class="grow"><b>' + esc(c.form_name) + '</b><br>기안자 ' + esc(c.applicant_name) + ' · 생년월일 ' + esc(c.birth || '-') + '</span>' +
-    '<span style="text-align:right">' + statusChip(c) + '<br><span class="muted">신청일자 ' + fmtDate(c.created_at) + '</span></span></div>' +
+    '<span style="text-align:right">' + statusChip(c) + '<br><span class="muted">' + fmtDate(c.created_at) + '</span></span></div>' +
     (grp === 'review' ? '<ul style="margin:8px 0 0;padding-left:20px;color:#7F1D1D">' + c.reasons.map((r) => '<li>' + esc(r) + '</li>').join('') + '</ul>' : '') +
     (c.status === 'VALI오류' && c.typo ? '<div class="notice err" style="margin-top:8px" role="alert">VALI 체크: ' + esc(c.typo.field) + ' 입력값 “' + esc(c.typo.wrong) + '” ↔ 원본 서류 “' + esc(c.typo.right) + '” 불일치(담당자 오탈자)</div>' : '') +
     '<div class="row" style="margin-top:8px"><button class="btn" data-act="detail" data-v="' + c.id + '">' + (open ? '매칭정보 닫기' : '매칭정보 보기') + '</button>' +
