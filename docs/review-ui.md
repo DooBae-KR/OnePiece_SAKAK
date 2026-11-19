@@ -16,3 +16,6 @@ node tests/review-workflow.test.js — 권한/단계 판정 테스트 19개 통�
 합성 데이터 전용 UI 시연이다. 기존 RLS 공개 접근 정책 때문에 실제 인증이나 서버측 접근 제어를 제공하지 않는다. 개인정보 입력 금지. 문서 종류 매핑은 시연용이고 재검증은 참조값 대조이며 전체 AI 재실행이 아니다. 실제 결재·급여 결정은 수행하지 않는다.
 
 상세 기획 및 작업 기록: https://app.notion.com/p/41d9ffcd2d168178bdc3c52e8e7a8963
+
+## 추가 통합 검증 (모의 API)
+`node tests/review-integration.test.js` — 15개 통과. 실제 index.html의 JS와 권한 모듈을 모의 DOM 및 Supabase/AI 응답으로 실행했다. 실제 브라우저, 운영 DB, 실제 AI 판독은 아직 미검증이다. 실 DB 변경 없음.
