@@ -42,6 +42,32 @@ h3{margin:0;font-size:15px}
 .rank .txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rank:hover,.rank:focus-visible{outline:1px solid #61666B;outline-offset:-1px}
 .rank:hover::after,.rank:focus-visible::after{content:'›';flex-shrink:0;font-size:22px;line-height:1;color:#1E2124}
+
+.bot-fab{position:fixed;right:16px;bottom:16px;z-index:30;width:72px;height:72px;border-radius:50%;border:2px solid #D9DFEA;background:#fff;box-shadow:0 4px 14px rgba(11,42,91,.25);display:flex;align-items:center;justify-content:center;padding:0}
+.bot-fab .dot{position:absolute;top:2px;right:2px;min-width:20px;height:20px;border-radius:10px;background:#DC2626;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px}
+.bot-panel{position:fixed;right:16px;bottom:100px;z-index:30;width:360px;max-width:calc(100vw - 32px);max-height:min(560px,calc(100vh - 130px));background:#fff;border:1px solid #D9DFEA;border-radius:14px;box-shadow:0 8px 28px rgba(11,42,91,.28);display:flex;flex-direction:column;overflow:hidden}
+.bot-head{background:#0B2A5B;color:#fff;padding:10px 12px;display:flex;align-items:center;gap:10px}
+.bot-head b{flex:1}
+.bot-log{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:#F3F5F9}
+.bmsg{max-width:88%;padding:9px 12px;border-radius:12px;font-size:14px;line-height:1.5;white-space:normal}
+.bmsg.bot{background:#fff;border:1px solid #D9DFEA;align-self:flex-start}
+.bmsg.me{background:#256EF4;color:#fff;align-self:flex-end}
+.bchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.bchip{min-height:36px;padding:0 12px;border:1px solid #256EF4;border-radius:999px;background:#fff;color:#1D4ED8;font-weight:700}
+.bot-foot{border-top:1px solid #D9DFEA;padding:8px;display:flex;gap:6px;background:#fff}
+.bot-cons{font-size:12px;padding:6px 12px;background:#fff;border-top:1px solid #E5E7EB;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.bot-cons button{min-height:28px;padding:0 10px;border-radius:999px;border:1px solid #9CA3AF;background:#fff;font-size:12px;font-weight:700}
+.bot-cons button.on{background:#D1FAE5;border-color:#047857;color:#065F46}
+@media (prefers-reduced-motion:no-preference){
+.bot-av{animation:botfloat 3s ease-in-out infinite}
+.bot-av .eyes{transform-origin:32px 31px;animation:botblink 4s infinite}
+.bot-av .wave{transform-origin:52px 50px;animation:botwave 1.6s ease-in-out infinite}
+.bot-av .ant{animation:botant 1.2s ease-in-out infinite}
+@keyframes botfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes botblink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+@keyframes botwave{0%,100%{transform:rotate(0)}25%{transform:rotate(-25deg)}75%{transform:rotate(20deg)}}
+@keyframes botant{0%,100%{opacity:1}50%{opacity:.35}}
+}
 .stickybar{position:sticky;bottom:0;background:#fff;border-top:1px solid #D9DFEA;margin:16px -20px -16px;padding:12px 20px;border-radius:0 0 12px 12px}
 .detail{margin-top:10px;padding:12px;border:1px dashed #9CA3AF;border-radius:10px;background:#F9FAFB;display:flex;flex-direction:column;gap:8px}
 .drow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #E5E7EB}
@@ -73,6 +99,7 @@ label{display:block;font-size:13px;font-weight:700;margin:8px 0 4px}
 </header>
 <main id="app"><div class="loading">DB에서 불러오는 중…</div></main>
 <div id="modal-root"></div>
+<div id="bot-root"></div>
 
 <script>
 /* ===== 설정: Supabase (시연용 합성 데이터 전용) =====
@@ -80,7 +107,7 @@ label{display:block;font-size:13px;font-weight:700;margin:8px 0 4px}
    실제 개인정보를 넣지 말 것. 행정망 안에서는 외부 클라우드를 쓸 수 없으므로 내부 DB로 이전해야 한다. */
 const SUPABASE_URL = 'https://naptmidzrudyezlegtgz.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_8fv7f3vSQoDK67lsflICeA__wgFlpCa';
-const ME = { ref: 'citizen-0001', name: '홍길동(합성)', birth: '1980-01-01' };
+const ME = { ref: 'citizen-0001', name: '홍길동(합성)', birth: '1980-01-01', phone: '010-****-5678', email: 'hong***@example.com', consent: { sms: true, email: true } };
 const WRONG_MSG = '첨부한 서류가 해당 서류와 맞지 않습니다. 올바른 서류를 첨부해 주세요.';
 const KIND = { manual: '현장 작성', gov24: '정부24 연계', upload: '직접 첨부' };
 
@@ -141,6 +168,62 @@ const statusChip = (c, forCitizen) => {
   return '<span class="chip ' + (forCitizen && c.status === 'VALI오류' ? 'amber' : (m[c.status] || '')) + '">' + esc(c.status === 'AI심사' ? '심사중' : c.status === 'VALI오류' ? (forCitizen ? '최종 심사중' : '오류') : c.status) + '</span>';
 };
 
+
+/* ===== 신청 도우미 챗봇 (시연용: 규칙 기반 답변, 실제 문자·메일은 발송되지 않음) ===== */
+S.bot = { open: false, msgs: [], seen: {}, unread: 0 };
+const BOT_AV = '<svg class="bot-av" viewBox="0 0 64 64" width="56" height="56" aria-hidden="true"><line x1="32" y1="6" x2="32" y2="14" stroke="#0B2A5B" stroke-width="3" stroke-linecap="round"/><circle class="ant" cx="32" cy="5" r="4" fill="#F59E0B"/><rect x="10" y="14" width="44" height="36" rx="14" fill="#256EF4"/><rect x="16" y="21" width="32" height="22" rx="10" fill="#fff"/><g class="eyes"><ellipse cx="25" cy="31" rx="3" ry="4" fill="#0B2A5B"/><ellipse cx="39" cy="31" rx="3" ry="4" fill="#0B2A5B"/></g><path d="M26 38 Q32 43 38 38" stroke="#0B2A5B" stroke-width="2.5" fill="none" stroke-linecap="round"/><g class="wave"><circle cx="54" cy="46" r="5" fill="#256EF4"/></g></svg>';
+function botSay(text, chips) { S.bot.msgs.push({ from: 'bot', text: text, chips: chips || null }); if (!S.bot.open) S.bot.unread++; }
+function botMe(text) { S.bot.msgs.push({ from: 'me', text: text }); }
+function docLines(pid) { return (S.pdocs[pid] || []).map((d) => '• ' + d.name + ' (' + d.req + ' · ' + KIND[d.kind] + ')').join('\n'); }
+function sendChips() {
+  const c = ME.consent; const ch = [];
+  if (c.sms) ch.push({ k: 'sms', t: '문자(SMS)로 받기' });
+  if (c.email) ch.push({ k: 'mail', t: '이메일로 받기' });
+  if (ch.length) ch.push({ k: 'no', t: '괜찮아요' });
+  return ch;
+}
+function botOnGuide(pid) {
+  if (S.bot.seen[pid]) return;
+  S.bot.seen[pid] = 1; const p = proc(pid);
+  botSay('안녕하세요, 신청 도우미예요. “' + p.name + '” 신청에 필요한 서류를 알려드릴게요.\n' + docLines(pid));
+  if (ME.consent.sms || ME.consent.email) botSay('수신 동의하신 방법으로 이 서류 안내를 보내드릴까요? 원하시는 방법을 골라 주세요.', sendChips());
+  else botSay('문자·이메일 수신 동의가 없어 발송은 어려워요. 화면의 안내를 확인해 주세요.');
+  S.bot.open = true; S.bot.unread = 0;
+}
+async function botSend(kind) {
+  const p = proc(S.procId);
+  botMe(kind === 'sms' ? '문자(SMS)로 받기' : '이메일로 받기');
+  if (!p) { botSay('먼저 신청할 서비스를 골라 주세요.'); return; }
+  if (!(kind === 'sms' ? ME.consent.sms : ME.consent.email)) { botSay('해당 방법은 수신 동의가 없어 보낼 수 없어요.'); return; }
+  try { await api('wf_view_log', { method: 'POST', body: { case_id: null, doc_id: '*', dept: (kind === 'sms' ? 'SMS' : '이메일') + ' 안내 발송(시연): ' + p.id }, headers: { Prefer: 'return=minimal' } }); } catch (e) {}
+  botSay((kind === 'sms' ? '문자(' + ME.phone + ')' : '이메일(' + ME.email + ')') + '로 “' + p.name + '” 필요 서류 안내를 보냈어요. (시연용이라 실제 발송은 되지 않아요.)');
+}
+function botAnswer(t) {
+  const p = S.procId ? proc(S.procId) : null;
+  if (/문자|sms|메일|이메일|발송|보내/i.test(t)) { botSay('어떤 방법으로 받으시겠어요?', sendChips().length ? sendChips() : null); if (!sendChips().length) botSay('수신 동의가 없어 발송은 어려워요.'); return; }
+  if (/발급|어디|어떻게/.test(t)) { if (!p) return botSay('먼저 신청할 서비스를 골라 주세요.'); botSay('서류별 준비 방법이에요.\n' + (S.pdocs[p.id] || []).map((d) => '• ' + d.name + ': ' + (d.kind === 'gov24' ? '정부24 연계로 자동 확인돼요' : d.kind === 'upload' ? '직접 발급받아 파일로 첨부해 주세요' : '주민센터·기관을 방문해 작성해요')).join('\n')); return; }
+  if (/서류|필요|준비/.test(t)) { if (!p) return botSay('먼저 신청할 서비스를 골라 주세요.'); botSay('“' + p.name + '” 필요 서류예요.\n' + docLines(p.id)); return; }
+  if (/대리|위임/.test(t)) { botSay('대리 신청은 위임장, 본인 의사 확인서, 가족관계 확인 서류가 필요해요. (시연 안내)'); return; }
+  if (/기간|언제|걸려/.test(t)) { botSay('처리 기간은 시연용 가정이라 정해져 있지 않아요. 진행 상태는 “내 신청함”에서 볼 수 있어요.'); return; }
+  if (/상태|진행|결과/.test(t)) { botSay('신청 후에는 “내 신청함” 탭에서 결재 진행 상태를 볼 수 있어요.'); return; }
+  botSay('아직 잘 모르는 질문이에요. “필요한 서류”, “서류 발급 방법”, “문자로 받기”처럼 물어봐 주세요.', [{ k: 'docs', t: '필요한 서류' }, { k: 'where', t: '서류 발급 방법' }, { k: 'status', t: '진행 상태 확인' }]);
+}
+function renderBot() {
+  const root = $('bot-root'); if (!root) return;
+  if (S.role !== 'citizen') { root.innerHTML = ''; return; }
+  const old = $('bot-in'); const val = old ? old.value : ''; const focus = old && document.activeElement === old;
+  const b = S.bot; const c = ME.consent;
+  const msgs = b.msgs.map((m) => '<div class="bmsg ' + m.from + '">' + esc(m.text).replace(/\n/g, '<br>') + (m.chips ? '<div class="bchips">' + m.chips.map((x) => '<button class="bchip" data-act="botchip" data-v="' + x.k + '">' + esc(x.t) + '</button>').join('') + '</div>' : '') + '</div>').join('');
+  const panel = b.open ? '<section class="bot-panel" role="dialog" aria-label="신청 도우미"><div class="bot-head">' + BOT_AV.replace('width="56" height="56"', 'width="36" height="36"') + '<b>신청 도우미</b><button class="btn" style="min-height:32px;padding:0 10px" data-act="botclose" aria-label="닫기">닫기</button></div>' +
+    '<div class="bot-log" id="bot-log" aria-live="polite">' + (msgs || '<div class="bmsg bot">안녕하세요, 신청 도우미예요. 서비스를 고르면 필요한 서류를 알려드려요.</div>') + '</div>' +
+    '<div class="bot-cons">수신 동의(시연) <button class="' + (c.sms ? 'on' : '') + '" data-act="botconsent" data-v="sms" aria-pressed="' + c.sms + '">문자 ' + (c.sms ? '동의' : '미동의') + '</button><button class="' + (c.email ? 'on' : '') + '" data-act="botconsent" data-v="email" aria-pressed="' + c.email + '">이메일 ' + (c.email ? '동의' : '미동의') + '</button></div>' +
+    '<div class="bot-foot"><input type="text" id="bot-in" placeholder="궁금한 점을 입력하세요" aria-label="질문 입력" style="flex:1"><button class="btn pri" data-act="botsend">보내기</button></div></section>' : '';
+  const fab = '<button class="bot-fab" data-act="' + (b.open ? 'botclose' : 'botopen') + '" aria-label="신청 도우미 ' + (b.open ? '닫기' : '열기') + '">' + BOT_AV + (!b.open && b.unread ? '<span class="dot">' + b.unread + '</span>' : '') + '</button>';
+  root.innerHTML = panel + fab;
+  const ni = $('bot-in'); if (ni) { ni.value = val; if (focus) ni.focus(); }
+  const lg = $('bot-log'); if (lg) lg.scrollTop = lg.scrollHeight;
+}
+
 /* ===== 렌더 ===== */
 function render() {
   $('tab-citizen').classList.toggle('on', S.role === 'citizen');
@@ -149,6 +232,7 @@ function render() {
   const app = $('app');
   app.innerHTML = (S.toast ? '<div class="notice info" role="status">' + esc(S.toast) + '</div>' : '') + (S.role === 'citizen' ? viewCitizen() : viewStaff());
   $('modal-root').innerHTML = S.modal ? viewModal() : '';
+  renderBot();
 }
 
 function viewCitizen() {
@@ -396,7 +480,16 @@ document.addEventListener('click', (ev) => {
   else if (a === 'mdetail') { S.myOpen = S.myOpen === v ? null : v; render(); }
   else if (a === 'mfilter') { const fs = $('f-s').value, fe = $('f-e').value, fq = $('f-q').value.trim(); if (fs && fe && fs > fe) { $('mine-err').innerHTML = '<div class="notice err" role="alert">시작일자가 마감일자보다 늦습니다. 기간을 다시 선택해 주세요.</div>'; return; } S.fs = fs; S.fe = fe; S.fq = fq; S.af = { s: fs, e: fe, q: fq }; S.myOpen = null; render(); }
   else if (a === 'mreset') { S.fs = ''; S.fe = ''; S.fq = ''; S.af = { s: '', e: '', q: '' }; S.myOpen = null; render(); }
-  else if (a === 'guide') { ev.preventDefault(); S.procId = v; S.step = 'guide'; S.recent = [v].concat((S.recent || []).filter((x) => x !== v)).slice(0, 5); render(); }
+  else if (a === 'guide') { ev.preventDefault(); S.procId = v; S.step = 'guide'; botOnGuide(v); S.recent = [v].concat((S.recent || []).filter((x) => x !== v)).slice(0, 5); render(); }
+  else if (a === 'botopen') { S.bot.open = true; S.bot.unread = 0; render(); }
+  else if (a === 'botclose') { S.bot.open = false; render(); }
+  else if (a === 'botconsent') { ME.consent[v] = !ME.consent[v]; render(); }
+  else if (a === 'botsend') { const i = $('bot-in'); const t = i ? i.value.trim() : ''; if (t) { botMe(t); i.value = ''; botAnswer(t); } render(); }
+  else if (a === 'botchip') {
+    if (v === 'sms' || v === 'mail') run(() => botSend(v === 'sms' ? 'sms' : 'mail'));
+    else if (v === 'no') { botMe('괜찮아요'); botSay('알겠어요. 필요하면 언제든 불러 주세요.'); render(); }
+    else { const q = { docs: '필요한 서류', where: '서류 발급 방법', status: '진행 상태 확인' }[v]; botMe(q); botAnswer(q); render(); }
+  }
   else if (a === 'search') { S.q = ($('q-input') || {}).value || ''; render(); }
   else if (a === 'sort') { S.sort = v; render(); }
   else if (a === 'apply') { S.att = {}; S.attCount = {}; S.attMsg = {}; S.step = 'apply'; render(); }
@@ -426,7 +519,7 @@ document.addEventListener('change', (ev) => {
   if (ev.target.id === 'lim') { S.limit = parseInt(ev.target.value, 10); render(); return; }
   const t = ev.target; if (t.dataset && t.dataset.act === 'file' && t.files[0]) { attachFile(t.dataset.v, t.files[0]).then(render); }
 });
-document.addEventListener('keydown', (ev) => { if (ev.target && ev.target.id === 'q-input' && ev.key === 'Enter') { S.q = ev.target.value; render(); return; } if (S.modal && S.modal.type === 'view' && (ev.ctrlKey || ev.metaKey) && /^[cpsa]$/i.test(ev.key)) ev.preventDefault(); });
+document.addEventListener('keydown', (ev) => { if (ev.target && ev.target.id === 'q-input' && ev.key === 'Enter') { S.q = ev.target.value; render(); return; } if (ev.target && ev.target.id === 'bot-in' && ev.key === 'Enter') { const t = ev.target.value.trim(); if (t) { botMe(t); ev.target.value = ''; botAnswer(t); render(); } return; } if (S.modal && S.modal.type === 'view' && (ev.ctrlKey || ev.metaKey) && /^[cpsa]$/i.test(ev.key)) ev.preventDefault(); });
 document.addEventListener('copy', (ev) => { if (S.modal && S.modal.type === 'view') ev.preventDefault(); });
 
 (async function init() {
