@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>복지행정 오류·사각지대 점검 프로토타입 (시연용 합성 데이터)</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:"Pretendard","Noto Sans KR",system-ui,-apple-system,"Segoe UI",sans-serif;background:#F3F5F9;color:#111827;font-size:15px;line-height:1.5}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+header{background:#0B2A5B;color:#fff;padding:12px 20px;display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+header h1{margin:0;font-size:17px;flex:1 1 260px}
+.tabs{display:flex;gap:6px}
+.tab{min-height:44px;padding:0 16px;border-radius:8px;border:0;font-weight:700;background:transparent;color:#E5ECF8}
+.tab.on{background:#fff;color:#0B2A5B}
+.who{font-size:13px;color:#C9D6EE;width:100%}
+main{max-width:1100px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+.card{background:#fff;border:1px solid #D9DFEA;border-radius:12px;padding:16px 20px}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.grow{flex:1 1 220px;min-width:0}
+h2{margin:0;font-size:18px}
+h3{margin:0;font-size:15px}
+.muted{color:#4B5563;font-size:13px}
+.btn{min-height:44px;padding:0 16px;border-radius:8px;border:1px solid #9CA3AF;background:#fff;color:#111827;font-weight:700}
+.btn.pri{background:#0B2A5B;border-color:#0B2A5B;color:#fff}
+.btn.ok{background:#047857;border-color:#047857;color:#fff}
+.btn.bad{background:#fff;border-color:#B91C1C;color:#B91C1C}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.chip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;background:#F3F4F6;color:#374151}
+.chip.red{background:#FEE2E2;color:#991B1B}.chip.green{background:#D1FAE5;color:#065F46}.chip.blue{background:#DBEAFE;color:#1E40AF}.chip.amber{background:#FEF3C7;color:#92400E}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.pcard{display:flex;flex-direction:column;gap:8px}
+.detail{margin-top:10px;padding:12px;border:1px dashed #9CA3AF;border-radius:10px;background:#F9FAFB;display:flex;flex-direction:column;gap:8px}
+.drow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #E5E7EB}
+.drow:first-child{border-top:0}
+.notice{padding:10px 12px;border-radius:8px;font-size:13px}
+.notice.err{background:#FEE2E2;color:#7F1D1D}.notice.warn{background:#FEF3C7;color:#78350F}.notice.info{background:#DBEAFE;color:#1E3A8A}
+input[type=text],input[type=date],select,textarea{width:100%;min-height:44px;padding:8px 10px;border:1px solid #9CA3AF;border-radius:8px;background:#fff}
+label{display:block;font-size:13px;font-weight:700;margin:8px 0 4px}
+.modal-bg{position:fixed;inset:0;background:rgba(17,24,39,.55);display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow:auto;z-index:20}
+.modal{background:#fff;border-radius:12px;max-width:640px;width:100%;padding:18px 20px;display:flex;flex-direction:column;gap:10px;margin:auto}
+.paper{position:relative;border:1px solid #9CA3AF;background:#fff;padding:22px;min-height:300px;overflow:hidden;user-select:none;-webkit-user-select:none}
+.paper .wm{position:absolute;inset:0;display:flex;flex-wrap:wrap;align-content:space-around;justify-content:space-around;pointer-events:none;transform:rotate(-24deg) scale(1.3);color:rgba(185,28,28,.16);font-weight:800;font-size:18px}
+.paper .wm span{padding:14px 18px;white-space:nowrap}
+.paper h4{margin:0 0 8px;font-size:18px}
+.noprint{}
+@media print{body{display:none}}
+.loading{padding:40px;text-align:center;color:#4B5563}
+@media (max-width:700px){main{padding:10px}.card{padding:14px}.btn{flex:1 1 auto}}
+</style>
+</head>
+<body>
+<header>
+  <h1>복지행정 오류·사각지대 점검 프로토타입</h1>
+  <nav class="tabs" aria-label="화면 전환">
+    <button class="tab" id="tab-citizen" data-act="role" data-v="citizen">시민 기안자</button>
+    <button class="tab" id="tab-staff" data-act="role" data-v="staff">담당자 결재함</button>
+  </nav>
+  <div class="who" id="who"></div>
+</header>
+<main id="app"><div class="loading">DB에서 불러오는 중…</div></main>
+<div id="modal-root"></div>
+
+<script>
+/* ===== 설정: Supabase (시연용 합성 데이터 전용) =====
+   publishable 키는 공개되어도 되는 키이지만, 이 프로젝트의 wf_ 테이블은 시연용으로 누구나 읽고 쓸 수 있게 열려 있다.
+   실제 개인정보를 넣지 말 것. 행정망 안에서는 외부 클라우드를 쓸 수 없으므로 내부 DB로 이전해야 한다. */
+const SUPABASE_URL = 'https://naptmidzrudyezlegtgz.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_8fv7f3vSQoDK67lsflICeA__wgFlpCa';
+const ME = { ref: 'citizen-0001', name: '홍길동(합성)', birth: '1980-01-01' };
+const WRONG_MSG = '첨부한 서류가 해당 서류와 맞지 않습니다. 올바른 서류를 첨부해 주세요.';
+const KIND = { manual: '현장 작성', gov24: '정부24 연계', upload: '직접 첨부' };
+
+async function api(path, opt) {
+  opt = opt || {};
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, {
+    method: opt.method || 'GET',
+    headers: Object.assign({ apikey: SUPABASE_KEY, 'Content-Type': 'application/json', Prefer: 'return=representation' }, opt.headers || {}),
+    body: opt.body ? JSON.stringify(opt.body) : undefined
+  });
+  if (!res.ok) { throw new Error('DB 오류 ' + res.status + ': ' + (await res.text()).slice(0, 200)); }
+  return res.status === 204 ? null : res.json();
+}
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = (id) => document.getElementById(id);
+
+const S = {
+  role: 'citizen', step: 'list', cat: '전체', procId: null, dept: null,
+  procs: [], pdocs: {}, cases: [], openId: null, toast: '', busy: false,
+  att: {}, attCount: {}, attMsg: {}, modal: null
+};
+
+/* ===== 데이터 ===== */
+async function loadAll() {
+  const [procs, pdocs, cases] = await Promise.all([
+    api('wf_procedures?select=*&order=sort'),
+    api('wf_proc_docs?select=*&order=sort'),
+    api('wf_cases?select=*,wf_case_docs(*)&order=created_at.desc')
+  ]);
+  S.procs = procs;
+  S.pdocs = {};
+  pdocs.forEach((d) => { (S.pdocs[d.proc_id] = S.pdocs[d.proc_id] || []).push(d); });
+  S.cases = cases;
+  if (!S.dept) S.dept = procs[0] ? procs[0].dept : null;
+}
+const proc = (id) => S.procs.find((p) => p.id === id);
+const depts = () => Array.from(new Set(S.procs.map((p) => p.dept)));
+const nonManual = (pid) => (S.pdocs[pid] || []).filter((d) => d.kind !== 'manual');
+const avgOf = (arr) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
+
+function computeReasons(blind, docs, defs) {
+  const r = [];
+  if (blind) r.push(blind);
+  const mism = docs.filter((d) => d.state === 'mismatch');
+  if (mism.length) r.push('정부24 대조 불일치: ' + mism.map((d) => (defs.find((x) => x.doc_id === d.doc_id) || {}).name).join(', '));
+  const avg = avgOf(docs.map((d) => d.sim || 0));
+  const low = docs.filter((d) => (d.sim || 0) < 80).map((d) => (defs.find((x) => x.doc_id === d.doc_id) || {}).name);
+  if (docs.length && avg < 80) r.push('서류 유사도 낮음 (평균 ' + avg + '%): ' + low.join(', '));
+  return { reasons: r, avg: avg };
+}
+const group = (c) => (c.status === '완료' || c.status === '반려') ? 'done' : (c.reasons && c.reasons.length ? 'review' : 'fit');
+const statusChip = (c) => {
+  const m = { '접수': 'blue', '체크완료': 'blue', 'AI심사': 'amber', 'VALI오류': 'red', '완료': 'green', '반려': 'red' };
+  return '<span class="chip ' + (m[c.status] || '') + '">' + esc(c.status) + '</span>';
+};
+
+/* ===== 렌더 ===== */
+function render() {
+  $('tab-citizen').classList.toggle('on', S.role === 'citizen');
+  $('tab-staff').classList.toggle('on', S.role === 'staff');
+  $('who').textContent = S.role === 'citizen' ? '기안자: ' + ME.name + ' · 생년월일 ' + ME.birth + ' · 모든 데이터는 시연용 합성 데이터입니다' : '담당자 화면 · 접속 부서: ' + (S.dept || '-') + ' · 모든 데이터는 시연용 합성 데이터입니다';
+  const app = $('app');
+  app.innerHTML = (S.toast ? '<div class="notice info" role="status">' + esc(S.toast) + '</div>' : '') + (S.role === 'citizen' ? viewCitizen() : viewStaff());
+  $('modal-root').innerHTML = S.modal ? viewModal() : '';
+}
+
+function viewCitizen() {
+  if (S.step === 'guide') return viewGuide();
+  if (S.step === 'apply') return viewApply();
+  const cats = ['전체'].concat(Array.from(new Set(S.procs.map((p) => p.cat))));
+  const mine = S.cases.filter((c) => c.applicant_ref === ME.ref);
+  const list = S.procs.filter((p) => S.cat === '전체' || p.cat === S.cat);
+  return '<section class="card"><h2>내 신청 내역</h2>' + (mine.length ? mine.map((c) =>
+    '<div class="drow"><span class="grow"><b>' + esc((proc(c.proc_id) || {}).name) + '</b><br><span class="muted">신청일 ' + esc(String(c.created_at).slice(0, 10)) + '</span></span>' + statusChip(c) + '</div>').join('') :
+    '<p class="muted">아직 신청한 내역이 없습니다. 아래에서 신청할 서비스를 고르세요.</p>') + '</section>' +
+    '<section class="card"><h2>신청서 찾기</h2><div class="row" style="margin:10px 0">' + cats.map((c) =>
+      '<button class="btn' + (S.cat === c ? ' pri' : '') + '" data-act="cat" data-v="' + esc(c) + '">' + esc(c) + '</button>').join('') + '</div>' +
+    '<div class="grid">' + list.map((p) => '<div class="card pcard"><span class="chip blue">' + esc(p.cat) + '</span><h3>' + esc(p.name) + '</h3><span class="muted">' + esc(p.descr) + '</span><span class="muted">담당: ' + esc(p.dept) + '</span><button class="btn pri" data-act="guide" data-v="' + p.id + '">신청</button></div>').join('') + '</div></section>';
+}
+
+function viewGuide() {
+  const p = proc(S.procId); const docs = S.pdocs[p.id] || [];
+  return '<section class="card"><button class="btn" data-act="home">← 목록으로</button><h2 style="margin-top:12px">' + esc(p.name) + '</h2><p>' + esc(p.descr) + '</p>' +
+    '<h3>신청 대상</h3><p>' + esc(p.target) + '</p><h3>신청 방법</h3><p>' + esc(p.how_to) + '</p><h3>담당 부서</h3><p>' + esc(p.dept) + '</p>' +
+    '<h3>유의 사항</h3><ul>' + (p.notes || []).map((n) => '<li>' + esc(n) + '</li>').join('') + '</ul>' +
+    '<h3>필요 서류</h3>' + docs.map((d) => '<div class="drow"><span class="grow">' + esc(d.name) + '</span><span class="chip">' + KIND[d.kind] + '</span><span class="chip">' + esc(d.req) + '</span></div>').join('') +
+    '<div class="notice warn" style="margin-top:12px">안내문·담당 부서·처리기간은 시연용 가정입니다. 실제 신청에는 사용하지 마세요.</div>' +
+    '<div class="row" style="margin-top:12px"><button class="btn pri" data-act="apply">신청 시작하기</button></div></section>';
+}
+
+function viewApply() {
+  const p = proc(S.procId); const docs = S.pdocs[p.id] || [];
+  const need = nonManual(p.id);
+  const okAll = need.every((d) => S.att[d.doc_id] && S.att[d.doc_id].state !== 'wrong');
+  return '<section class="card"><button class="btn" data-act="guide" data-v="' + p.id + '">← 신청 안내</button><h2 style="margin-top:12px">' + esc(p.form_name) + ' 기안</h2>' +
+    '<p class="muted">서류를 첨부하면 AI가 서류 종류가 맞는지(유사도)와 정부24 연계 값을 확인합니다. 시연에서는 파일 이름의 키워드로 판정합니다. (예: “이직”, “통장”, “임대”)</p>' +
+    docs.map((d) => {
+      if (d.kind === 'manual') return '<div class="drow"><span class="grow">' + esc(d.name) + '</span><span class="chip amber">현장 방문 작성</span></div>';
+      const a = S.att[d.doc_id]; const msg = S.attMsg[d.doc_id];
+      return '<div style="border-top:1px solid #E5E7EB;padding:10px 0"><div class="row"><span class="grow"><b>' + esc(d.name) + '</b> <span class="chip">' + KIND[d.kind] + '</span> <span class="chip">' + esc(d.req) + '</span></span>' +
+        '<label class="btn" style="margin:0;display:inline-flex;align-items:center;cursor:pointer">서류 첨부<input type="file" data-act="file" data-v="' + d.doc_id + '" style="display:none"></label></div>' +
+        (a ? '<div class="muted" style="margin-top:6px">첨부: ' + esc(a.fname) + ' · 유사도 ' + a.sim + '% · ' + (a.state === 'ok' ? '일치' : a.state === 'mismatch' ? '정부24 대조 불일치' : '서류 불일치') + '</div>' : '') +
+        (msg ? '<div class="notice ' + (a && a.state === 'wrong' ? 'err' : 'warn') + '" style="margin-top:6px" role="alert">' + esc(msg) + '</div>' : '') + '</div>';
+    }).join('') +
+    '<div class="row" style="margin-top:12px"><button class="btn pri" data-act="submit"' + (okAll && !S.busy ? '' : ' disabled') + '>' + (S.busy ? '제출 중…' : '결재 진행(기안 제출)') + '</button>' +
+    (okAll ? '' : '<span class="muted">모든 첨부 서류가 올바르게 첨부되어야 제출할 수 있습니다.</span>') + '</div></section>';
+}
+
+function viewStaff() {
+  const ds = depts(); const myProcs = S.procs.filter((p) => p.dept === S.dept).map((p) => p.id);
+  const cs = S.cases.filter((c) => myProcs.indexOf(c.proc_id) >= 0);
+  const g = { review: [], fit: [], done: [] }; cs.forEach((c) => g[group(c)].push(c));
+  const block = (title, sub, arr) => '<section class="card"><h2>' + esc(title) + ' ' + arr.length + '건</h2><p class="muted">' + esc(sub) + '</p>' + (arr.length ? arr.map(card).join('') : '<p class="muted">해당 건이 없습니다.</p>') + '</section>';
+  return '<section class="card"><h3>접속 부서</h3><div class="row" style="margin-top:8px">' + ds.map((d) => '<button class="btn' + (S.dept === d ? ' pri' : '') + '" data-act="dept" data-v="' + esc(d) + '">' + esc(d) + '</button>').join('') + '</div>' +
+    '<p class="muted" style="margin-top:8px">부서를 바꾸면 그 부서가 담당하는 신청서만 조회됩니다. 다른 절차의 신청과 서류는 조회되지 않습니다.</p>' +
+    '<div class="row" style="margin-top:8px"><button class="btn" data-act="new">+ 신청 등록</button><button class="btn pri" data-act="batch">일괄체크 실행</button></div></section>' +
+    block('AI 검토 필요', '사각지대 위험이나 서류 오류가 있어 담당자가 직접 확인할 건입니다.', g.review) +
+    block('AI 적합', '서류 유사도가 높고 사각지대가 없는 건입니다.', g.fit) +
+    block('처리 완료·반려', '승인되었거나 반려된 건입니다.', g.done);
+}
+
+function card(c) {
+  const docs = c.wf_case_docs || []; const defs = S.pdocs[c.proc_id] || [];
+  const open = S.openId === c.id;
+  const grp = group(c);
+  return '<div style="border-top:1px solid #E5E7EB;padding:12px 0"><div class="row"><span class="grow"><b>' + esc(c.form_name) + '</b><br>기안자 ' + esc(c.applicant_name) + ' · 생년월일 ' + esc(c.birth || '-') + '</span>' +
+    '<span class="chip ' + (c.avg < 80 ? 'red' : '') + '">서류 평균 유사도 ' + (c.avg == null ? '-' : c.avg + '%') + '</span>' + statusChip(c) + '</div>' +
+    (grp === 'review' ? '<ul style="margin:8px 0 0;padding-left:20px;color:#7F1D1D">' + c.reasons.map((r) => '<li>' + esc(r) + '</li>').join('') + '</ul>' : '') +
+    (c.status === 'VALI오류' && c.typo ? '<div class="notice err" style="margin-top:8px" role="alert">VALI 체크: ' + esc(c.typo.field) + ' 입력값 “' + esc(c.typo.wrong) + '” ↔ 원본 서류 “' + esc(c.typo.right) + '” 불일치(담당자 오탈자)</div>' : '') +
+    '<div class="row" style="margin-top:8px"><button class="btn" data-act="detail" data-v="' + c.id + '">' + (open ? '매칭정보 닫기' : '매칭정보 보기') + '</button>' +
+    (grp !== 'done' && c.status !== 'AI심사' && c.status !== 'VALI오류' ? '<button class="btn ok" data-act="approve" data-v="' + c.id + '">승인</button><button class="btn bad" data-act="reject" data-v="' + c.id + '">반려</button>' : '') +
+    (c.status === 'VALI오류' ? '<button class="btn pri" data-act="revali" data-v="' + c.id + '">수정 후 재검증</button>' : '') +
+    '<button class="btn" data-act="edit" data-v="' + c.id + '">수정</button><button class="btn bad" data-act="del" data-v="' + c.id + '">삭제</button></div>' +
+    (open ? '<div class="detail">' + (docs.length ? docs.map((d) => {
+      const df = defs.find((x) => x.doc_id === d.doc_id) || {};
+      return '<div class="drow"><span class="grow"><b>' + esc(df.name) + '</b> <span class="chip">' + KIND[df.kind] + '</span><br><span class="muted">유사도 ' + (d.sim == null ? '-' : d.sim + '%') + ' · ' + (d.state === 'ok' ? '일치' : d.state === 'mismatch' ? '정부24 대조 불일치' : '서류 불일치') + (d.fname ? ' · ' + esc(d.fname) : '') + '</span>' +
+        (d.state === 'mismatch' && df.diff ? '<br><span class="muted">' + esc(df.diff) + '</span>' : '') + '</span>' +
+        '<button class="btn" data-act="view" data-c="' + c.id + '" data-v="' + d.doc_id + '">서류 열람</button></div>';
+    }).join('') : '<span class="muted">첨부 서류 정보가 없습니다.</span>') + '</div>' : '') + '</div>';
+}
+
+function viewModal() {
+  const m = S.modal;
+  if (m.type === 'view') {
+    const c = S.cases.find((x) => x.id === m.c); const df = (S.pdocs[c.proc_id] || []).find((x) => x.doc_id === m.d) || {};
+    const cd = (c.wf_case_docs || []).find((x) => x.doc_id === m.d) || {};
+    const wm = Array(24).fill('<span>열람 전용 · 복사 금지 · ' + esc(S.dept) + '</span>').join('');
+    return '<div class="modal-bg"><div class="modal" role="dialog" aria-modal="true" aria-label="서류 열람">' +
+      '<h2>' + esc(df.name) + ' <span class="chip">열람 전용</span></h2><div class="muted">신청: ' + esc(c.applicant_name) + ' · ' + esc(c.form_name) + '</div>' +
+      '<div class="paper" oncontextmenu="return false"><div class="wm">' + wm + '</div><h4>' + esc(df.name) + '</h4><p>시연용 합성 서류입니다. 실제 서류가 아닙니다.</p>' +
+      '<p>신청인: ' + esc(c.applicant_name) + '<br>생년월일: ' + esc(c.birth || '-') + '<br>서류 유사도: ' + (cd.sim == null ? '-' : cd.sim + '%') + '</p>' +
+      (cd.fname ? '<p>첨부 파일명: ' + esc(cd.fname) + '</p>' : '') +
+      (cd.signs && cd.signs.length ? '<div class="notice err"><b>위·변조 의심 징후 (시연용 예시)</b><ul style="margin:6px 0 0;padding-left:18px">' + cd.signs.map((s) => '<li>' + esc(s) + '</li>').join('') + '</ul></div>' : '') + '</div>' +
+      '<div class="notice warn">화면 수준의 보호입니다(다운로드 버튼 없음, 복사·우클릭·인쇄 차단, 워터마크). 화면 캡처와 개발자 도구는 막지 못합니다. 열람 기록은 DB에 남습니다.</div>' +
+      '<div class="row"><button class="btn pri" data-act="close">닫기</button></div></div></div>';
+  }
+  if (m.type === 'del') {
+    return '<div class="modal-bg"><div class="modal" role="dialog" aria-modal="true"><h2>신청 삭제</h2><p>“' + esc(m.name) + '” 신청 카드를 삭제합니다. 삭제하면 되돌릴 수 없습니다.</p><div class="row"><button class="btn bad" data-act="delok" data-v="' + m.id + '">삭제</button><button class="btn" data-act="close">취소</button></div></div></div>';
+  }
+  const e = m.type === 'edit' ? S.cases.find((x) => x.id === m.id) : null;
+  const pOpts = S.procs.filter((p) => p.dept === S.dept).map((p) => '<option value="' + p.id + '"' + (e && e.proc_id === p.id ? ' selected' : '') + '>' + esc(p.form_name) + '</option>').join('');
+  return '<div class="modal-bg"><div class="modal" role="dialog" aria-modal="true"><h2>' + (e ? '신청 수정' : '신청 등록') + '</h2>' +
+    (S.formErr ? '<div class="notice err" role="alert">' + esc(S.formErr) + '</div>' : '') +
+    '<label for="f-form">신청서명</label><select id="f-form"' + (e ? ' disabled' : '') + '>' + pOpts + '</select>' +
+    '<label for="f-name">기안자 성명</label><input type="text" id="f-name" value="' + esc(e ? e.applicant_name : '') + '" placeholder="예: 홍길동(합성)">' +
+    '<label for="f-birth">생년월일</label><input type="date" id="f-birth" value="' + esc(e ? e.birth || '' : '') + '">' +
+    '<label for="f-blind">사각지대 메모 (선택)</label><textarea id="f-blind" rows="2">' + esc(e ? e.blind : '') + '</textarea>' +
+    (e ? '' : '<label><input type="checkbox" id="f-low"> 서류 유사도가 낮은 건으로 등록(시연)</label>') +
+    '<div class="row"><button class="btn pri" data-act="save" data-v="' + (e ? e.id : '') + '">저장</button><button class="btn" data-act="close">취소</button></div></div></div>';
+}
+
+/* ===== 동작 ===== */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function run(fn) {
+  try { await fn(); } catch (e) { S.toast = String(e.message || e); }
+  render();
+}
+async function refresh() { await loadAll(); }
+async function patch(id, body) { await api('wf_cases?id=eq.' + encodeURIComponent(id), { method: 'PATCH', body: Object.assign({ updated_at: new Date().toISOString() }, body) }); }
+
+async function attachFile(docId, file) {
+  const p = proc(S.procId); const d = (S.pdocs[p.id] || []).find((x) => x.doc_id === docId);
+  const fname = file.name; const hit = (d.keys || []).some((k) => fname.indexOf(k) >= 0);
+  S.attCount[docId] = (S.attCount[docId] || 0) + 1;
+  let sim, state, msg = '';
+  if (!hit) { sim = 28; state = 'wrong'; msg = WRONG_MSG; }
+  else if (d.kind === 'gov24' && d.diff && S.attCount[docId] === 1) { sim = d.good; state = 'mismatch'; msg = '정부24 연계 값과 다릅니다: ' + d.diff + ' 같은 서류를 다시 첨부하면 확인을 이어갑니다.'; }
+  else { sim = d.good; state = 'ok'; }
+  S.att[docId] = { fname, sim, state }; S.attMsg[docId] = msg;
+}
+
+async function submitCase() {
+  const p = proc(S.procId); const need = nonManual(p.id);
+  S.busy = true; render();
+  const rows = need.map((d) => ({ doc_id: d.doc_id, sim: S.att[d.doc_id].sim, state: S.att[d.doc_id].state === 'mismatch' ? 'mismatch' : 'ok', fname: S.att[d.doc_id].fname }));
+  const r = computeReasons('', rows, need);
+  const id = 'app_' + Date.now().toString(36);
+  await api('wf_cases', { method: 'POST', body: { id: id, proc_id: p.id, applicant_name: ME.name, applicant_ref: ME.ref, birth: ME.birth, form_name: p.form_name, blind: '', avg: r.avg, reasons: r.reasons } });
+  await api('wf_case_docs', { method: 'POST', body: rows.map((x) => Object.assign({ case_id: id }, x)) });
+  S.att = {}; S.attCount = {}; S.attMsg = {}; S.busy = false; S.step = 'list';
+  S.toast = '기안이 제출되었습니다. 담당자 결재함(“' + p.dept + '”)에서 확인할 수 있습니다.';
+  await refresh();
+}
+
+async function approve(id) {
+  await patch(id, { status: 'AI심사' }); await refresh(); render();
+  await sleep(1300);
+  const c = S.cases.find((x) => x.id === id);
+  await patch(id, { status: c && c.typo ? 'VALI오류' : '완료' }); await refresh();
+}
+
+async function saveForm(id) {
+  const name = $('f-name').value.trim(); const birth = $('f-birth').value; const blind = $('f-blind').value.trim();
+  if (!name) { S.formErr = '기안자 성명을 입력하세요.'; return; }
+  if (!birth) { S.formErr = '생년월일을 입력하세요.'; return; }
+  S.formErr = '';
+  if (id) {
+    const c = S.cases.find((x) => x.id === id);
+    const r = computeReasons(blind, c.wf_case_docs || [], S.pdocs[c.proc_id] || []);
+    await patch(id, { applicant_name: name, birth: birth, blind: blind, reasons: r.reasons, avg: r.avg });
+  } else {
+    const pid = $('f-form').value; const p = proc(pid); const low = $('f-low') && $('f-low').checked;
+    const need = nonManual(pid); const rows = need.map((d) => ({ doc_id: d.doc_id, sim: low ? 58 : 95, state: low ? 'wrong' : 'ok' }));
+    const r = computeReasons(blind, rows, need);
+    const nid = 'reg_' + Date.now().toString(36);
+    await api('wf_cases', { method: 'POST', body: { id: nid, proc_id: pid, applicant_name: name, applicant_ref: 'registered', birth: birth, form_name: p.form_name, blind: blind, avg: r.avg, reasons: r.reasons } });
+    await api('wf_case_docs', { method: 'POST', body: rows.map((x) => Object.assign({ case_id: nid }, x)) });
+  }
+  S.modal = null; S.toast = '저장되었습니다.'; await refresh();
+}
+
+document.addEventListener('click', (ev) => {
+  const t = ev.target.closest('[data-act]'); if (!t || t.tagName === 'INPUT') return;
+  const a = t.dataset.act, v = t.dataset.v;
+  S.toast = '';
+  if (a === 'role') { S.role = v; render(); }
+  else if (a === 'cat') { S.cat = v; render(); }
+  else if (a === 'home') { S.step = 'list'; render(); }
+  else if (a === 'guide') { S.procId = v; S.step = 'guide'; render(); }
+  else if (a === 'apply') { S.att = {}; S.attCount = {}; S.attMsg = {}; S.step = 'apply'; render(); }
+  else if (a === 'submit') run(submitCase);
+  else if (a === 'dept') { S.dept = v; S.openId = null; render(); }
+  else if (a === 'detail') { S.openId = S.openId === v ? null : v; render(); }
+  else if (a === 'batch') run(async () => {
+    const targets = S.cases.filter((c) => S.procs.some((p) => p.id === c.proc_id && p.dept === S.dept) && c.status === '접수');
+    for (const c of targets) await patch(c.id, { status: '체크완료' });
+    S.toast = '일괄체크 완료: ' + targets.length + '건을 점검했습니다. 사각지대·서류 오류가 있는 건은 “AI 검토 필요”에 남습니다.'; await refresh();
+  });
+  else if (a === 'approve') run(() => approve(v));
+  else if (a === 'reject') run(async () => { await patch(v, { status: '반려' }); await refresh(); });
+  else if (a === 'revali') run(async () => { await patch(v, { typo: null, status: '완료' }); S.toast = '수정 후 재검증을 통과했습니다.'; await refresh(); });
+  else if (a === 'new') { S.formErr = ''; S.modal = { type: 'new' }; render(); }
+  else if (a === 'edit') { S.formErr = ''; S.modal = { type: 'edit', id: v }; render(); }
+  else if (a === 'del') { const c = S.cases.find((x) => x.id === v); S.modal = { type: 'del', id: v, name: c.applicant_name + ' · ' + c.form_name }; render(); }
+  else if (a === 'delok') run(async () => { await api('wf_cases?id=eq.' + encodeURIComponent(v), { method: 'DELETE' }); S.modal = null; S.openId = null; S.toast = '삭제되었습니다.'; await refresh(); });
+  else if (a === 'save') run(() => saveForm(v));
+  else if (a === 'close') { S.modal = null; render(); }
+  else if (a === 'view') {
+    const cid = t.dataset.c; S.modal = { type: 'view', c: cid, d: v }; render();
+    api('wf_view_log', { method: 'POST', body: { case_id: cid, doc_id: v, dept: S.dept }, headers: { Prefer: 'return=minimal' } }).catch(() => {});
+  }
+});
+document.addEventListener('change', (ev) => {
+  const t = ev.target; if (t.dataset && t.dataset.act === 'file' && t.files[0]) { attachFile(t.dataset.v, t.files[0]).then(render); }
+});
+document.addEventListener('keydown', (ev) => { if (S.modal && S.modal.type === 'view' && (ev.ctrlKey || ev.metaKey) && /^[cpsa]$/i.test(ev.key)) ev.preventDefault(); });
+document.addEventListener('copy', (ev) => { if (S.modal && S.modal.type === 'view') ev.preventDefault(); });
+
+(async function init() {
+  try { await loadAll(); } catch (e) { $('app').innerHTML = '<div class="notice err">DB에 연결하지 못했습니다. ' + esc(e.message) + '</div>'; return; }
+  render();
+})();
+</script>
+</body>
+</html>
