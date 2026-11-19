@@ -100,3 +100,9 @@ insert into public.wf_case_docs values('s3_c6','s3d3',60,'wrong',null,null);
 insert into public.wf_case_docs values('s3_c6','s3d4',55,'wrong',null,null);
 insert into public.wf_case_docs values('s3_c6','s3d5',72,'wrong',null,null);
 insert into public.wf_case_docs values('s3_c6','s3d6',58,'wrong',null,null);
+-- 신청일자(가데이터)
+update public.wf_cases c set created_at = v.d::timestamptz, updated_at = v.d::timestamptz from (values
+('s1_c2','2026-11-03 10:20+09'),('s1_c3','2026-11-05 14:05+09'),('s1_c4','2026-11-09 09:40+09'),('s1_c5','2026-11-12 16:30+09'),('s1_c6','2026-11-16 11:15+09'),
+('s2_c2','2026-11-04 13:00+09'),('s2_c3','2026-11-06 15:45+09'),('s2_c4','2026-11-10 10:10+09'),('s2_c5','2026-11-13 09:25+09'),('s2_c6','2026-11-17 14:50+09'),
+('s3_c2','2026-11-02 11:30+09'),('s3_c3','2026-11-07 10:00+09'),('s3_c4','2026-11-11 13:40+09'),('s3_c5','2026-11-14 16:10+09'),('s3_c6','2026-11-18 09:55+09')
+) as v(id,d) where c.id = v.id;
