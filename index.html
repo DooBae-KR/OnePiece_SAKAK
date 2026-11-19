@@ -31,6 +31,8 @@ h3{margin:0;font-size:15px}
 .chip.red{background:#FEE2E2;color:#991B1B}.chip.green{background:#D1FAE5;color:#065F46}.chip.blue{background:#DBEAFE;color:#1E40AF}.chip.amber{background:#FEF3C7;color:#92400E}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
 .pcard{display:flex;flex-direction:column;gap:8px}
+.pcard .btn{margin-top:auto}
+.stickybar{position:sticky;bottom:0;background:#fff;border-top:1px solid #D9DFEA;margin:16px -20px -16px;padding:12px 20px;border-radius:0 0 12px 12px}
 .detail{margin-top:10px;padding:12px;border:1px dashed #9CA3AF;border-radius:10px;background:#F9FAFB;display:flex;flex-direction:column;gap:8px}
 .drow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #E5E7EB}
 .drow:first-child{border-top:0}
@@ -156,7 +158,7 @@ function viewGuide() {
     '<h3>유의 사항</h3><ul>' + (p.notes || []).map((n) => '<li>' + esc(n) + '</li>').join('') + '</ul>' +
     '<h3>필요 서류</h3>' + docs.map((d) => '<div class="drow"><span class="grow">' + esc(d.name) + '</span><span class="chip">' + KIND[d.kind] + '</span><span class="chip">' + esc(d.req) + '</span></div>').join('') +
     '<div class="notice warn" style="margin-top:12px">안내문·담당 부서·처리기간은 시연용 가정입니다. 실제 신청에는 사용하지 마세요.</div>' +
-    '<div class="row" style="margin-top:12px"><button class="btn pri" data-act="apply">신청 시작하기</button></div></section>';
+    '<div class="row stickybar"><button class="btn pri grow" data-act="apply">신청 시작하기</button></div></section>';
 }
 
 function viewApply() {
