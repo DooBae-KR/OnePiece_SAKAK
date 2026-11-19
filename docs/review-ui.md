@@ -22,3 +22,9 @@ node tests/review-workflow.test.js — 권한/단계 판정 테스트 19개 통�
 
 ## 실제 API 연결 점검
 `python3 tests/live_api_smoke.py`로 Supabase 읽기 4종과 로컬 AI health 확인. 합성 PDF/TXT 및 해당 절차·서류 ID를 `--fixture`, `--proc-id`, `--doc-id`로 지정하면 엔진 POST 2종도 확인한다. 공유 DB 쓰기는 하지 않는다. 현재 실행 환경에서 DNS 해석 실패, 로컬 엔진 연결 거부로 실제 API 결과 미검증.
+
+## 시민 신청 도우미 챗봇 개선
+- DB 장애에도 챗봇 초기화, seed.sql의 합성 서비스·서류 정의로 안내하는 읽기 전용 fallback.
+- 서비스 선택/질문 내 서비스 인식, 서류·준비 방법·자격·대리 신청·상태 안내. DB 상태 조회 실패 시 추측하지 않음.
+- 문자/메일은 동의 확인 후 미리보기만 제공, 실제 발송 및 DB 기록 없음. 별도 LLM/AI 엔진 불필요.
+- `node tests/chatbot.test.js`: 19건 통과 (모의 DOM·API). 기존 단위 19건, 통합 15건 재검증 통과. 실제 브라우저 및 외부 API 미검증.
