@@ -118,13 +118,13 @@ function computeReasons(blind, docs, defs) {
   if (mism.length) r.push('정부24 대조 불일치: ' + mism.map((d) => (defs.find((x) => x.doc_id === d.doc_id) || {}).name).join(', '));
   const avg = avgOf(docs.map((d) => d.sim || 0));
   const low = docs.filter((d) => (d.sim || 0) < 80).map((d) => (defs.find((x) => x.doc_id === d.doc_id) || {}).name);
-  if (docs.length && avg < 80) r.push('서류 유사도 낮음 (평균 ' + avg + '%): ' + low.join(', '));
+  if (docs.length && avg < 80) r.push('서류 불일치 의심: ' + low.join(', '));
   return { reasons: r, avg: avg };
 }
 const group = (c) => (c.status === '완료' || c.status === '반려') ? 'done' : (c.reasons && c.reasons.length ? 'review' : 'fit');
 const statusChip = (c) => {
   const m = { '접수': 'blue', '체크완료': 'blue', 'AI심사': 'amber', 'VALI오류': 'red', '완료': 'green', '반려': 'red' };
-  return '<span class="chip ' + (m[c.status] || '') + '">' + esc(c.status) + '</span>';
+  return '<span class="chip ' + (m[c.status] || '') + '">' + esc(c.status === 'AI심사' ? '심사중' : c.status) + '</span>';
 };
 
 /* ===== 렌더 ===== */
@@ -166,13 +166,13 @@ function viewApply() {
   const need = nonManual(p.id);
   const okAll = need.every((d) => S.att[d.doc_id] && S.att[d.doc_id].state !== 'wrong');
   return '<section class="card"><button class="btn" data-act="guide" data-v="' + p.id + '">← 신청 안내</button><h2 style="margin-top:12px">' + esc(p.form_name) + ' 기안</h2>' +
-    '<p class="muted">서류를 첨부하면 AI가 서류 종류가 맞는지(유사도)와 정부24 연계 값을 확인합니다. 시연에서는 파일 이름의 키워드로 판정합니다. (예: “이직”, “통장”, “임대”)</p>' +
+    '<p class="muted">서류를 첨부하면 서류 종류가 맞는지와 정부24 연계 값을 확인합니다. 시연에서는 파일 이름의 키워드로 판정합니다. (예: “이직”, “통장”, “임대”)</p>' +
     docs.map((d) => {
       if (d.kind === 'manual') return '<div class="drow"><span class="grow">' + esc(d.name) + '</span><span class="chip amber">현장 방문 작성</span></div>';
       const a = S.att[d.doc_id]; const msg = S.attMsg[d.doc_id];
       return '<div style="border-top:1px solid #E5E7EB;padding:10px 0"><div class="row"><span class="grow"><b>' + esc(d.name) + '</b> <span class="chip">' + KIND[d.kind] + '</span> <span class="chip">' + esc(d.req) + '</span></span>' +
         '<label class="btn" style="margin:0;display:inline-flex;align-items:center;cursor:pointer">서류 첨부<input type="file" data-act="file" data-v="' + d.doc_id + '" style="display:none"></label></div>' +
-        (a ? '<div class="muted" style="margin-top:6px">첨부: ' + esc(a.fname) + ' · 유사도 ' + a.sim + '% · ' + (a.state === 'ok' ? '일치' : a.state === 'mismatch' ? '정부24 대조 불일치' : '서류 불일치') + '</div>' : '') +
+        (a ? '<div class="muted" style="margin-top:6px">첨부: ' + esc(a.fname) + ' · ' + (a.state === 'ok' ? '일치' : a.state === 'mismatch' ? '정부24 대조 불일치' : '서류 불일치') + '</div>' : '') +
         (msg ? '<div class="notice ' + (a && a.state === 'wrong' ? 'err' : 'warn') + '" style="margin-top:6px" role="alert">' + esc(msg) + '</div>' : '') + '</div>';
     }).join('') +
     '<div class="row" style="margin-top:12px"><button class="btn pri" data-act="submit"' + (okAll && !S.busy ? '' : ' disabled') + '>' + (S.busy ? '제출 중…' : '결재 진행(기안 제출)') + '</button>' +
@@ -187,8 +187,8 @@ function viewStaff() {
   return '<section class="card"><h3>접속 부서</h3><div class="row" style="margin-top:8px">' + ds.map((d) => '<button class="btn' + (S.dept === d ? ' pri' : '') + '" data-act="dept" data-v="' + esc(d) + '">' + esc(d) + '</button>').join('') + '</div>' +
     '<p class="muted" style="margin-top:8px">부서를 바꾸면 그 부서가 담당하는 신청서만 조회됩니다. 다른 절차의 신청과 서류는 조회되지 않습니다.</p>' +
     '<div class="row" style="margin-top:8px"><button class="btn" data-act="new">+ 신청 등록</button><button class="btn pri" data-act="batch">일괄체크 실행</button></div></section>' +
-    block('AI 검토 필요', '사각지대 위험이나 서류 오류가 있어 담당자가 직접 확인할 건입니다.', g.review) +
-    block('AI 적합', '서류 유사도가 높고 사각지대가 없는 건입니다.', g.fit) +
+    block('검토 필요', '사각지대 위험이나 서류 오류가 있어 담당자가 직접 확인할 건입니다.', g.review) +
+    block('적합', '서류 오류와 사각지대가 없는 건입니다.', g.fit) +
     block('처리 완료·반려', '승인되었거나 반려된 건입니다.', g.done);
 }
 
@@ -197,7 +197,7 @@ function card(c) {
   const open = S.openId === c.id;
   const grp = group(c);
   return '<div style="border-top:1px solid #E5E7EB;padding:12px 0"><div class="row"><span class="grow"><b>' + esc(c.form_name) + '</b><br>기안자 ' + esc(c.applicant_name) + ' · 생년월일 ' + esc(c.birth || '-') + '</span>' +
-    '<span class="chip ' + (c.avg < 80 ? 'red' : '') + '">서류 평균 유사도 ' + (c.avg == null ? '-' : c.avg + '%') + '</span>' + statusChip(c) + '</div>' +
+    statusChip(c) + '</div>' +
     (grp === 'review' ? '<ul style="margin:8px 0 0;padding-left:20px;color:#7F1D1D">' + c.reasons.map((r) => '<li>' + esc(r) + '</li>').join('') + '</ul>' : '') +
     (c.status === 'VALI오류' && c.typo ? '<div class="notice err" style="margin-top:8px" role="alert">VALI 체크: ' + esc(c.typo.field) + ' 입력값 “' + esc(c.typo.wrong) + '” ↔ 원본 서류 “' + esc(c.typo.right) + '” 불일치(담당자 오탈자)</div>' : '') +
     '<div class="row" style="margin-top:8px"><button class="btn" data-act="detail" data-v="' + c.id + '">' + (open ? '매칭정보 닫기' : '매칭정보 보기') + '</button>' +
@@ -206,7 +206,7 @@ function card(c) {
     '<button class="btn" data-act="edit" data-v="' + c.id + '">수정</button><button class="btn bad" data-act="del" data-v="' + c.id + '">삭제</button></div>' +
     (open ? '<div class="detail">' + (docs.length ? docs.map((d) => {
       const df = defs.find((x) => x.doc_id === d.doc_id) || {};
-      return '<div class="drow"><span class="grow"><b>' + esc(df.name) + '</b> <span class="chip">' + KIND[df.kind] + '</span><br><span class="muted">유사도 ' + (d.sim == null ? '-' : d.sim + '%') + ' · ' + (d.state === 'ok' ? '일치' : d.state === 'mismatch' ? '정부24 대조 불일치' : '서류 불일치') + (d.fname ? ' · ' + esc(d.fname) : '') + '</span>' +
+      return '<div class="drow"><span class="grow"><b>' + esc(df.name) + '</b> <span class="chip">' + KIND[df.kind] + '</span><br><span class="muted">' + (d.state === 'ok' ? '일치' : d.state === 'mismatch' ? '정부24 대조 불일치' : '서류 불일치') + (d.fname ? ' · ' + esc(d.fname) : '') + '</span>' +
         (d.state === 'mismatch' && df.diff ? '<br><span class="muted">' + esc(df.diff) + '</span>' : '') + '</span>' +
         '<button class="btn" data-act="view" data-c="' + c.id + '" data-v="' + d.doc_id + '">서류 열람</button></div>';
     }).join('') : '<span class="muted">첨부 서류 정보가 없습니다.</span>') + '</div>' : '') + '</div>';
@@ -221,7 +221,7 @@ function viewModal() {
     return '<div class="modal-bg"><div class="modal" role="dialog" aria-modal="true" aria-label="서류 열람">' +
       '<h2>' + esc(df.name) + ' <span class="chip">열람 전용</span></h2><div class="muted">신청: ' + esc(c.applicant_name) + ' · ' + esc(c.form_name) + '</div>' +
       '<div class="paper" oncontextmenu="return false"><div class="wm">' + wm + '</div><h4>' + esc(df.name) + '</h4><p>시연용 합성 서류입니다. 실제 서류가 아닙니다.</p>' +
-      '<p>신청인: ' + esc(c.applicant_name) + '<br>생년월일: ' + esc(c.birth || '-') + '<br>서류 유사도: ' + (cd.sim == null ? '-' : cd.sim + '%') + '</p>' +
+      '<p>신청인: ' + esc(c.applicant_name) + '<br>생년월일: ' + esc(c.birth || '-') + '</p>' +
       (cd.fname ? '<p>첨부 파일명: ' + esc(cd.fname) + '</p>' : '') +
       (cd.signs && cd.signs.length ? '<div class="notice err"><b>위·변조 의심 징후 (시연용 예시)</b><ul style="margin:6px 0 0;padding-left:18px">' + cd.signs.map((s) => '<li>' + esc(s) + '</li>').join('') + '</ul></div>' : '') + '</div>' +
       '<div class="notice warn">화면 수준의 보호입니다(다운로드 버튼 없음, 복사·우클릭·인쇄 차단, 워터마크). 화면 캡처와 개발자 도구는 막지 못합니다. 열람 기록은 DB에 남습니다.</div>' +
@@ -238,7 +238,7 @@ function viewModal() {
     '<label for="f-name">기안자 성명</label><input type="text" id="f-name" value="' + esc(e ? e.applicant_name : '') + '" placeholder="예: 홍길동(합성)">' +
     '<label for="f-birth">생년월일</label><input type="date" id="f-birth" value="' + esc(e ? e.birth || '' : '') + '">' +
     '<label for="f-blind">사각지대 메모 (선택)</label><textarea id="f-blind" rows="2">' + esc(e ? e.blind : '') + '</textarea>' +
-    (e ? '' : '<label><input type="checkbox" id="f-low"> 서류 유사도가 낮은 건으로 등록(시연)</label>') +
+    (e ? '' : '<label><input type="checkbox" id="f-low"> 서류에 문제가 있는 건으로 등록(시연)</label>') +
     '<div class="row"><button class="btn pri" data-act="save" data-v="' + (e ? e.id : '') + '">저장</button><button class="btn" data-act="close">취소</button></div></div></div>';
 }
 
@@ -317,7 +317,7 @@ document.addEventListener('click', (ev) => {
   else if (a === 'batch') run(async () => {
     const targets = S.cases.filter((c) => S.procs.some((p) => p.id === c.proc_id && p.dept === S.dept) && c.status === '접수');
     for (const c of targets) await patch(c.id, { status: '체크완료' });
-    S.toast = '일괄체크 완료: ' + targets.length + '건을 점검했습니다. 사각지대·서류 오류가 있는 건은 “AI 검토 필요”에 남습니다.'; await refresh();
+    S.toast = '일괄체크 완료: ' + targets.length + '건을 점검했습니다. 사각지대·서류 오류가 있는 건은 “검토 필요”에 남습니다.'; await refresh();
   });
   else if (a === 'approve') run(() => approve(v));
   else if (a === 'reject') run(async () => { await patch(v, { status: '반려' }); await refresh(); });
