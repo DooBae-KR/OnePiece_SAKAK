@@ -28,3 +28,9 @@ node tests/review-workflow.test.js — 권한/단계 판정 테스트 19개 통�
 - 서비스 선택/질문 내 서비스 인식, 서류·준비 방법·자격·대리 신청·상태 안내. DB 상태 조회 실패 시 추측하지 않음.
 - 문자/메일은 동의 확인 후 미리보기만 제공, 실제 발송 및 DB 기록 없음. 별도 LLM/AI 엔진 불필요.
 - `node tests/chatbot.test.js`: 19건 통과 (모의 DOM·API). 기존 단위 19건, 통합 15건 재검증 통과. 실제 브라우저 및 외부 API 미검증.
+
+## 실제 엔진 연결 점검 결과 (2026-11-20, 권승빈)
+`python3 tests/live_api_smoke.py --fixture 이직확인서_홍길동_합성.pdf --proc-id s1 --doc-id s1d3` (엔진 규칙 판독 모드)
+- PASS: wf_procedures · wf_proc_docs · wf_approval_line 읽기, engine health, check-doc(state=ok), check-case(findings=4)
+- FAIL 1건: wf_cases 조회 HTTP 400 — 공유 DB에 `findings` 칸이 아직 없음 (`migrations/002_double_check.sql` 미적용, 의도적으로 보류 중)
+- 병합 후 `node tests/*.test.js` 53건(19+15+19) 모두 통과

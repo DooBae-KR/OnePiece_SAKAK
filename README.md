@@ -33,4 +33,4 @@ python3 welfare_ai/src/server.py --ai     # Gemini 판독까지 (welfare_ai/.env
 | `POST /api/check-case` | `{proc_id, docs: {doc_id: {filename, data}}}` | `{summary, findings[], docs: {doc_id: {state, sim}}}` |
 
 - 엔진은 127.0.0.1에서만 열리고, 로컬에서 연 앱만 호출할 수 있습니다(CORS). 파일은 판독 후 바로 지웁니다.
-- PDF·텍스트만 판독합니다(스캔 이미지는 다음 단계). 모든 데이터는 합성 데이터입니다.
+- PDF·텍스트·사진(JPG·PNG)을 판독합니다. 사진은 엔진을 `--ai`로 켜면 Gemini가 직접 읽고, 아니면 무료 OCR로 읽어 "원본 확인 필요" 경고를 붙입니다. 모든 데이터는 합성 데이터입니다.

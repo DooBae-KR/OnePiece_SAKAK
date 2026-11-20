@@ -386,13 +386,13 @@ function viewApply() {
   const need = nonManual(p.id);
   const okAll = need.every((d) => S.att[d.doc_id] && S.att[d.doc_id].state !== 'wrong');
   return '<section class="card"><button class="btn" data-act="guide" data-v="' + p.id + '">← 신청 안내</button><h2 style="margin-top:12px">' + esc(p.form_name) + ' 기안</h2>' +
-    '<p class="muted">서류를 첨부하면 서류 종류가 맞는지와 정부24 연계 값을 확인합니다. ' + (S.engine ? '판독 엔진이 서류 내용을 읽어 판정합니다. (PDF·텍스트 파일)' : '시연에서는 파일 이름의 키워드로 판정합니다. (예: “이직”, “통장”, “임대”)') + '</p>' +
+    '<p class="muted">서류를 첨부하면 서류 종류가 맞는지와 정부24 연계 값을 확인합니다. ' + (S.engine ? '판독 엔진이 서류 내용을 읽어 판정합니다. (PDF·텍스트·사진 JPG/PNG)' : '시연에서는 파일 이름의 키워드로 판정합니다. (예: “이직”, “통장”, “임대”)') + '</p>' +
     docs.map((d) => {
       if (d.kind === 'manual') return '<div class="drow"><span class="grow">' + esc(d.name) + '</span><span class="chip amber">현장 방문 작성</span></div>';
       const a = S.att[d.doc_id]; const msg = S.attMsg[d.doc_id];
       return '<div style="border-top:1px solid #E5E7EB;padding:10px 0"><div class="row"><span class="grow"><b>' + esc(d.name) + '</b> <span class="chip">' + KIND[d.kind] + '</span> <span class="chip">' + esc(d.req) + '</span></span>' +
-        '<label class="btn" style="margin:0;display:inline-flex;align-items:center;cursor:pointer">서류 첨부<input type="file" data-act="file" data-v="' + d.doc_id + '" style="display:none"></label></div>' +
-        (a ? '<div class="muted" style="margin-top:6px">첨부: ' + esc(a.fname) + ' · ' + (a.state === 'ok' ? '일치' : a.state === 'mismatch' ? '정부24 대조 불일치' : '서류 불일치') + '</div>' : '') +
+        '<label class="btn" style="margin:0;display:inline-flex;align-items:center;cursor:pointer">서류 첨부<input type="file" accept=".pdf,.txt,.jpg,.jpeg,.png,image/*" data-act="file" data-v="' + d.doc_id + '" style="display:none"></label></div>' +
+        (a ? '<div class="muted" style="margin-top:6px">첨부: ' + esc(a.fname) + ' · ' + (a.state === 'ok' ? '일치' : a.state === 'mismatch' ? '정부24 대조 불일치' : '서류 불일치') + (a.readBy ? ' · ' + esc(a.readBy) : '') + '</div>' : '') +
         (msg ? '<div class="notice ' + (a && a.state === 'wrong' ? 'err' : 'warn') + '" style="margin-top:6px" role="alert">' + esc(msg) + '</div>' : '') + '</div>';
     }).join('') +
     '<div class="row" style="margin-top:12px"><button class="btn pri" data-act="submit"' + (okAll && !S.busy ? '' : ' disabled') + '>' + (S.busy ? '제출 중…' : '결재 진행(기안 제출)') + '</button>' +
@@ -444,7 +444,8 @@ function dcPanel(c){
  return '<div class="dc"><div class="dc-head">AI Double Check · '+esc(STAFF_LABEL[S.staffSeq])+' <span class="chip">'+own.length+'건</span></div><div class="dc-stage now"><b>현재 담당 단계의 점검 결과</b><p class="muted">다른 결재 단계의 오류 상세와 근거는 표시하지 않습니다.</p>'+
  (own.length?own.map(f=>'<div class="dc-item"><span class="chip '+(SEV[f.severity]||SEV.info)[0]+'">'+(SEV[f.severity]||SEV.info)[1]+'</span> <b>'+esc(f.title)+'</b><div class="muted">'+esc(f.detail)+'</div>'+
  (Array.isArray(f.evidence)?f.evidence.slice(0,3).map(e=>'<div class="dc-ev">근거 · '+esc(e.doc)+' · '+esc(e.field)+': “'+esc(e.excerpt)+'”</div>').join(''):'')+(f.gov?'<div class="dc-ev">원본 · '+esc(f.gov.source)+': '+esc(Array.isArray(f.gov.value)?f.gov.value.join(', '):f.gov.value)+'</div>':'')+
- (f.clause?'<div class="dc-ev">엔진 제시 정책 근거(담당자 확인 필요) · '+esc(f.clause)+'</div>':'')+(f.action?'<div class="muted">조치: '+esc(f.action)+'</div>':'')+'</div>').join(''):'<p class="muted">'+((c.findings||[]).length?'해당 단계에 배정된 점검 결과가 없습니다.':'저장된 AI 상세 결과가 없습니다. 기존 시연 자료를 확인하세요.')+'</p>')+'</div></div>';
+ (f.clause?'<div class="dc-ev">엔진 제시 정책 근거(담당자 확인 필요) · '+esc(f.clause)+'</div>':'')+(f.action?'<div class="muted">조치: '+esc(f.action)+'</div>':'')+
+ (Array.isArray(f.clause_links)&&f.clause_links.length?'<div class="muted">근거 조문(법제처에서 조문 제목 확인): '+f.clause_links.map(l=>/^https:\/\/www\.law\.go\.kr\//.test(l.url)?'<a href="'+esc(l.url)+'" target="_blank" rel="noopener">'+esc(l.text)+'</a>':esc(l.text)).join(' · ')+'</div>':'')+'</div>').join(''):'<p class="muted">'+((c.findings||[]).length?'해당 단계에 배정된 점검 결과가 없습니다.':'저장된 AI 상세 결과가 없습니다. 기존 시연 자료를 확인하세요.')+'</p>')+'</div></div>';
 }
 
 function viewModal() {
@@ -496,7 +497,7 @@ async function attachFile(docId, file) {
     try {
       const data = await toB64(file);
       const r = await engine('/api/check-doc', { proc_id: p.id, doc_id: docId, filename: file.name, data: data });
-      S.att[docId] = { fname: file.name, sim: r.sim, state: r.state, data: data };
+      S.att[docId] = { fname: file.name, sim: r.sim, state: r.state, data: data, readBy: r.read_by };
       S.attMsg[docId] = r.state === 'wrong' ? WRONG_MSG + (r.detected_type ? ' (판독 결과: ' + r.detected_type + ')' : '') :
         (r.suspicious && r.suspicious.length ? '서류 안에 판독을 조작하려는 듯한 문장이 있어 담당자가 확인합니다.' : '');
     } catch (e) { S.att[docId] = null; S.attMsg[docId] = e.message; }
