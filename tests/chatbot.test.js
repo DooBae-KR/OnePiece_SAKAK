@@ -1,0 +1,33 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+async function chatbotTest(html,workflow,assert){
+ const results=[];const check=(n,v)=>{assert(v,n);results.push(n)};
+ const elements={},handlers={};const doc={getElementById:id=>elements[id]??=( {innerHTML:'',textContent:'',value:'',classList:{toggle(){}},focus(){}}),addEventListener:(k,f)=>handlers[k]=f,activeElement:null};const win={};
+ new Function('window',workflow)(win);let calls=0;
+ const fetch=async()=>{calls++;throw Error('offline test');};
+ const inline=html.match(/<script>([\s\S]*?)<\/script>/)[1].replace('(async function init() {','const initPromise=(async function init() {');
+ const api=new Function('window','document','fetch','AbortController','setTimeout','clearTimeout',inline+'\nreturn {S,ME,initPromise,botOpen,botChip,botSubmit,botOnGuide,renderBot,BOT_SEED};')(win,doc,fetch,class{constructor(){this.signal={}}abort(){}},()=>0,()=>{});
+ await api.initPromise;const S=api.S,last=()=>S.bot.msgs.at(-1),ask=q=>api.botSubmit(q);
+ check('DB 장애에도 챗봇 버튼 표시',elements['bot-root'].innerHTML.includes('botopen')&&!S.dbReady);
+ api.botOpen();api.renderBot();check('첫 안내 및 빠른 질문',elements['bot-root'].innerHTML.includes('필요한 서류'));
+ ask('필요한 서류');check('서비스 미선택 시 선택지',last().chips.length===3);
+ api.botChip('service:s1');check('seed 기반 긴급복지 서류',last().text.includes('이직확인서')&&last().text.includes('seed.sql'));
+ ask('노인 장기요양 서류');check('질문 내 서비스 자동 전환',S.bot.pid==='s2'&&last().text.includes('의사소견서'));
+ ask('대리 신청');check('대리신청 정보는 선택 서비스에 근거',last().text.includes('대리신청 위임장'));
+ ask('유족연금 서류');check('세 번째 서비스 안내',S.bot.pid==='s3'&&last().text.includes('사망진단서'));
+ ask('서류 준비 방법');check('준비 방법',last().text.includes('직접 준비'));
+ ask('신청 자격');check('대상 및 실제 자격 판단 제한',last().text.includes('실제 수급 자격'));
+ ask('진행 상태');check('연결 실패 시 상태 추측 금지',last().text.includes('조회할 수 없어요'));
+ ask('문자로 보내줘');const chip=last().chips.find(x=>x.k.startsWith('sms:'));api.botChip(chip.k);check('실제 미발송 표시',last().text.includes('실제 전송 없음'));
+ api.ME.consent.sms=false;api.botChip(chip.k);check('오래된 버튼도 동의 확인',last().text.includes('수신 동의가 없어'));
+ ask('주민등록번호 123456-1234567');check('민감 정보 대화 미표시',!S.bot.msgs.some(x=>x.text.includes('123456-1234567')));
+ check('챗봇 답변은 외부 요청 미발생',calls===5);
+ const before=S.bot.msgs.length;handlers.keydown({target:{id:'bot-in',value:'필요한 서류'},key:'Enter',isComposing:true});check('한글 조합 중 엔터 차단',S.bot.msgs.length===before);
+ handlers.keydown({target:{id:'bot-in',value:'필요한 서류'},key:'Enter',preventDefault(){}});check('엔터 전송',S.bot.msgs.length===before+2);
+ S.dbReady=true;S.procs=[{id:'s1',name:'DB 서비스',target:'DB 대상'}];S.pdocs={s1:[{name:'DB 최신 서류',kind:'upload',req:'필수'}]};S.cases=[{applicant_ref:api.ME.ref,proc_id:'s1',form_name:'내 신청',status:'AI심사'},{applicant_ref:'other',proc_id:'s1',form_name:'타인 신청',status:'완료'}];S.bot.pid='s1';
+ ask('필요한 서류');check('DB 연결 시 DB 자료 우선',last().text.includes('DB 최신 서류')&&!last().text.includes('이직확인서'));
+ ask('신청 상태');check('내 신청 상태만 표시',last().text.includes('내 신청')&&!last().text.includes('타인 신청'));
+ S.role='staff';api.renderBot();check('담당자 화면에서 챗봇 숨김',elements['bot-root'].innerHTML==='');
+ return results;
+}
+const root=path.resolve(__dirname,'..'); chatbotTest(fs.readFileSync(path.join(root,'index.html'),'utf8'),fs.readFileSync(path.join(root,'review-workflow.js'),'utf8'),assert.ok).then(xs=>xs.forEach(x=>console.log('PASS '+x))).catch(e=>{console.error(e);process.exitCode=1;});

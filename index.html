@@ -93,6 +93,8 @@ label{display:block;font-size:13px;font-weight:700;margin:8px 0 4px}
 .dc-item:first-of-type{border-top:0}
 .dc-ev{font-size:12px;color:#374151;background:#F3F4F6;border-radius:6px;padding:4px 8px;margin-top:4px;word-break:break-all}
 @media (max-width:700px){main{padding:10px}.card{padding:14px}.btn{flex:1 1 auto}}
+.scope-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}.scope-grid .btn{text-align:left;min-height:48px;height:auto;padding:9px 12px}.scope-grid .btn small{display:block;font-weight:400;opacity:.85}.scope-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}.scope-summary>div{border:1px solid #D9DFEA;border-radius:10px;padding:12px;background:#F8FAFC}.scope-summary strong{font-size:24px;display:block;color:#0B2A5B}.case-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.restricted{background:#F3F4F6;color:#4B5563;padding:10px;border-radius:8px;font-size:13px}.scope-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.scope-note{font-size:12px;color:#4B5563;margin:8px 0}@media(max-width:520px){.scope-summary{grid-template-columns:1fr}.scope-grid{grid-template-columns:1fr}}
+.bot-source{padding:6px 12px;background:#EFF6FF;color:#1E40AF;font-size:12px}.bot-foot input{min-width:0}.bot-log{min-height:100px}.bot-panel{max-height:min(590px,calc(100dvh - 120px))}
 </style>
 </head>
 <body>
@@ -108,6 +110,7 @@ label{display:block;font-size:13px;font-weight:700;margin:8px 0 4px}
 <div id="modal-root"></div>
 <div id="bot-root"></div>
 
+<script src="./review-workflow.js"></script>
 <script>
 /* ===== 설정: Supabase (시연용 합성 데이터 전용) =====
    publishable 키는 공개되어도 되는 키이지만, 이 프로젝트의 wf_ 테이블은 시연용으로 누구나 읽고 쓸 수 있게 열려 있다.
@@ -152,7 +155,7 @@ const fmtDate = (t) => { if (!t) return '-'; const d = new Date(t); if (isNaN(d)
 const $ = (id) => document.getElementById(id);
 
 const S = {
-  role: 'citizen', step: 'list', cat: '전체', procId: null, dept: null,
+  role: 'citizen', step: 'list', cat: '전체', procId: null, dept: null, staffSeq: 0,
   procs: [], pdocs: {}, cases: [], openId: null, toast: '', busy: false,
   att: {}, attCount: {}, attMsg: {}, modal: null, engine: false
 };
@@ -171,7 +174,9 @@ async function loadAll() {
   S.pdocs = {};
   pdocs.forEach((d) => { (S.pdocs[d.proc_id] = S.pdocs[d.proc_id] || []).push(d); });
   S.cases = cases;
-  if (!S.dept) S.dept = procs[0] ? procs[0].dept : null;
+  S.dbReady = true;
+  const scopes = WF.scopes(S.lines);
+  if (!scopes.some(x => x.dept === S.dept && x.seq === S.staffSeq)) { const first = scopes[0]; S.dept = first ? first.dept : null; S.staffSeq = first ? first.seq : 0; }
 }
 const proc = (id) => S.procs.find((p) => p.id === id);
 const depts = () => Array.from(new Set(S.procs.map((p) => p.dept)));
@@ -196,54 +201,77 @@ const statusChip = (c, forCitizen) => {
 
 
 /* ===== 신청 도우미 챗봇 (시연용: 규칙 기반 답변, 실제 문자·메일은 발송되지 않음) ===== */
-S.bot = { open: false, msgs: [], seen: {}, unread: 0 };
+const BOT_SEED = {"procs":[{"id":"s1","dept":"주민센터 복지팀","name":"긴급복지지원·기초생활보장 급여 신청","descr":"실직 등으로 생계가 어려워진 가구가 긴급복지지원 또는 기초생활보장 급여를 신청합니다.","target":"실직·소득 단절로 생계가 곤란한 가구 (시연용 예시)","how_to":"온라인으로 서류를 첨부해 기안한 뒤, 신청서와 동의서는 주민센터를 방문해 작성합니다.","notes":["선행 절차: 고용센터에서 실업급여 신청과 구직 등록 결과를 먼저 확인하세요. (시연 가정)","같은 소득·재산 서류를 다시 내지 않도록 정부24 연계 서류를 자동으로 대조합니다.","이직일과 소득 신고 시점이 다르면 담당자 검토로 분류될 수 있습니다."]},{"id":"s2","dept":"건강보험공단 장기요양운영센터","name":"노인장기요양 인정·장애인 등록 신청","descr":"거동이 어려워진 부모를 위해 노인장기요양 등급과 장애인 등록을 신청합니다. 자녀 등 가족이 대리 신청할 수 있습니다.","target":"장기요양 또는 장애 판정이 필요한 본인, 대리 신청 시 가족 (시연용 예시)","how_to":"온라인으로 서류를 첨부해 기안한 뒤, 신청서와 본인 의사 확인서는 현장방문으로 작성합니다.","notes":["대리 신청은 위임장과 본인 의사 확인서, 가족관계 확인이 필요합니다.","판정 결과가 나오기 전까지 임시 지원 연계를 안내받을 수 있습니다. (시연 가정)","서류 위·변조나 본인 의사 불확인이 의심되면 담당자 검토로 분류됩니다."]},{"id":"s3","dept":"국민연금공단 유족연금팀","name":"유족연금·사망일시금 청구 및 상속 정리","descr":"가족이 사망한 뒤 사망 신고, 유족연금(사망일시금) 청구, 건강보험 자격 변동을 함께 신청합니다.","target":"배우자 등 가족이 사망한 유족 (시연용 예시)","how_to":"온라인으로 서류를 첨부해 기안한 뒤, 사망 신고서와 청구서는 현장방문으로 작성합니다.","notes":["기관마다 사망 정보가 반영되는 시점이 달라 연계 정보와 신청 내용이 다를 수 있습니다.","사망 후에도 급여가 이어지는 사후 수급이 의심되면 담당자 검토로 분류됩니다.","안심상속 원스톱 조회 결과를 함께 제출합니다. (시연 가정)"]}],"docs":{"s1":[{"doc_id":"s1d1","name":"긴급복지지원(기초생활보장) 신청서","kind":"manual","req":"필수 신청서"},{"doc_id":"s1d2","name":"소득·재산 확인 동의서","kind":"manual","req":"필수 신청서"},{"doc_id":"s1d3","name":"이직확인서 (고용센터 발급)","kind":"gov24","req":"필수"},{"doc_id":"s1d4","name":"임대차계약서","kind":"upload","req":"해당자"},{"doc_id":"s1d5","name":"통장 사본","kind":"upload","req":"필수"},{"doc_id":"s1d6","name":"소득·재산 확인 서류","kind":"gov24","req":"필요 시"}],"s2":[{"doc_id":"s2d1","name":"노인장기요양 인정 신청서","kind":"manual","req":"필수 신청서"},{"doc_id":"s2d2","name":"본인 의사 확인서 (대리 신청 시 본인 서명)","kind":"manual","req":"대리 신청 시"},{"doc_id":"s2d3","name":"의사소견서","kind":"upload","req":"필수"},{"doc_id":"s2d4","name":"장애진단서","kind":"upload","req":"필수"},{"doc_id":"s2d5","name":"대리신청 위임장","kind":"upload","req":"대리 신청 시"},{"doc_id":"s2d6","name":"대리인 관계 확인 서류 (가족관계)","kind":"gov24","req":"대리 신청 시"},{"doc_id":"s2d7","name":"소득 증빙 서류","kind":"gov24","req":"필요 시"}],"s3":[{"doc_id":"s3d1","name":"사망 신고서","kind":"manual","req":"필수 신청서"},{"doc_id":"s3d2","name":"유족연금(사망일시금) 청구서","kind":"manual","req":"필수 신청서"},{"doc_id":"s3d3","name":"사망진단서","kind":"upload","req":"필수"},{"doc_id":"s3d4","name":"가족관계 기록사항에 관한 증명서","kind":"gov24","req":"필수"},{"doc_id":"s3d5","name":"안심상속 재산 조회 결과","kind":"gov24","req":"필수"},{"doc_id":"s3d6","name":"건강보험 자격 변동 신고서","kind":"upload","req":"필수"}]}}; // seed.sql의 합성 절차·서류 정의만, 신청자 데이터 제외
+S.bot = { open: false, msgs: [], seen: {}, unread: 0, pid: null, pending: null, draft: '' };
+S.dbReady = false;
 const BOT_AV = '<svg class="bot-av" viewBox="0 0 64 64" width="56" height="56" aria-hidden="true"><line x1="32" y1="6" x2="32" y2="14" stroke="#0B2A5B" stroke-width="3" stroke-linecap="round"/><circle class="ant" cx="32" cy="5" r="4" fill="#F59E0B"/><rect x="10" y="14" width="44" height="36" rx="14" fill="#256EF4"/><rect x="16" y="21" width="32" height="22" rx="10" fill="#fff"/><g class="eyes"><ellipse cx="25" cy="31" rx="3" ry="4" fill="#0B2A5B"/><ellipse cx="39" cy="31" rx="3" ry="4" fill="#0B2A5B"/></g><path d="M26 38 Q32 43 38 38" stroke="#0B2A5B" stroke-width="2.5" fill="none" stroke-linecap="round"/><g class="wave"><circle cx="54" cy="46" r="5" fill="#256EF4"/></g></svg>';
 function botSay(text, chips) { S.bot.msgs.push({ from: 'bot', text: text, chips: chips || null }); if (!S.bot.open) S.bot.unread++; }
 function botMe(text) { S.bot.msgs.push({ from: 'me', text: text }); }
-function docLines(pid) { return (S.pdocs[pid] || []).map((d) => '• ' + d.name + ' (' + d.req + ' · ' + KIND[d.kind] + ')').join('\n'); }
-function sendChips() {
-  const c = ME.consent; const ch = [];
-  if (c.sms) ch.push({ k: 'sms', t: '문자(SMS)로 받기' });
-  if (c.email) ch.push({ k: 'mail', t: '이메일로 받기' });
-  if (ch.length) ch.push({ k: 'no', t: '괜찮아요' });
-  return ch;
+function botProcs(){ return S.dbReady ? S.procs : BOT_SEED.procs; }
+function botDocs(pid){ return (S.dbReady ? S.pdocs[pid] : BOT_SEED.docs[pid]) || []; }
+function botProc(pid){ return botProcs().find(p=>p.id===pid); }
+const BOT_MENU=[{k:'services',t:'지원 서비스 찾기'},{k:'docs',t:'필요한 서류'},{k:'where',t:'서류 준비 방법'},{k:'status',t:'신청 상태 확인'}];
+function botSource(){return S.dbReady?'등록된 시연 데이터 기준':'DB 미연결 · seed.sql 시연 데이터 기준';}
+function docLines(pid){const rows=botDocs(pid);return rows.length?rows.map(d=>'• '+d.name+' ('+(d.req||'확인 필요')+' · '+(KIND[d.kind]||'확인 필요')+')').join('\n'):'등록된 서류 정보가 없어요. 담당 기관에 확인해 주세요.';}
+function sendChips(pid){const a=[];if(ME.consent.sms)a.push({k:'sms:'+pid,t:'문자 안내 미리보기'});if(ME.consent.email)a.push({k:'mail:'+pid,t:'이메일 안내 미리보기'});return a;}
+function botChoose(intent){S.bot.pending=intent;botSay('어떤 서비스에 대해 안내해 드릴까요? (시연용)',botProcs().map(p=>({k:'service:'+p.id,t:p.name})));if(!botProcs().length)botSay('현재 등록된 서비스가 없어요. 담당 기관에 문의해 주세요.');}
+function botOnGuide(pid){if(!botProc(pid))return;S.bot.pid=pid;S.bot.pending=null;S.bot.open=true;S.bot.unread=0;if(S.bot.seen[pid])return;S.bot.seen[pid]=1;botRespond('docs',botProc(pid));botSay('궁금한 내용을 선택하거나 직접 질문해 주세요.',BOT_MENU);}
+function botOpen(){S.bot.open=true;S.bot.unread=0;if(!S.bot.msgs.length)botSay('안녕하세요! 복지 신청 도우미입니다. '+botSource()+'이며 실제 수급 자격 판단이나 문자 발송은 하지 않습니다.',BOT_MENU);}
+function botRespond(intent,p){
+ if(!p){botChoose(intent);return;}
+ const prefix='['+botSource()+'] '+p.name+'\n';
+ const rows=botDocs(p.id);
+ if(intent==='docs')botSay(prefix+'필요 서류\n'+docLines(p.id),[{k:'where',t:'서류 준비 방법'},{k:'guide:'+p.id,t:'신청 안내 보기'},{k:'send',t:'문자·이메일 미리보기'}]);
+ else if(intent==='where')botSay(prefix+'서류별 준비 방법\n'+(rows.length?rows.map(d=>'• '+d.name+': '+(d.kind==='gov24'?'정부24 연계 대조 대상 (시연)':d.kind==='upload'?'직접 준비 후 파일 첨부':'현장 작성 대상')).join('\n'):'등록된 서류 정보가 없어요.')+'\n실제 발급처는 담당 기관에 확인해 주세요.');
+ else if(intent==='target')botSay(prefix+(p.target||'등록된 신청 대상 정보가 없어요.')+'\n실제 수급 자격은 담당 기관에서 판단합니다.');
+ else if(intent==='apply')botSay(prefix+(p.how_to||'등록된 신청 방법이 없어요.')+'\n담당 부서: '+(p.dept||'확인 필요'),[{k:'guide:'+p.id,t:'신청 안내 보기'}]);
+ else if(intent==='dept')botSay(prefix+'담당 부서(시연): '+(p.dept||'확인 필요')+'\n실제 담당 기관은 별도 확인이 필요해요.');
+ else if(intent==='proxy'){const a=rows.filter(d=>/대리|위임|본인 의사/.test(d.name+' '+d.req));botSay(prefix+(a.length?'대리 신청 관련 서류\n'+a.map(d=>'• '+d.name+' ('+d.req+')').join('\n'):'등록된 대리 신청 안내가 없어요. 담당 기관에 확인해 주세요.'));}
+ else if(intent==='send'){const a=sendChips(p.id);botSay(a.length?'수신 동의된 방법으로 안내 미리보기를 만들 수 있어요. 실제 발송은 하지 않습니다.':'수신 동의된 방법이 없어요. 아래 동의 설정을 확인해 주세요.',a);}
 }
-function botOnGuide(pid) {
-  if (S.bot.seen[pid]) return;
-  S.bot.seen[pid] = 1; const p = proc(pid);
-  botSay('안녕하세요, 신청 도우미예요. “' + p.name + '” 신청에 필요한 서류를 알려드릴게요.\n' + docLines(pid));
-  if (ME.consent.sms || ME.consent.email) botSay('수신 동의하신 방법으로 이 서류 안내를 보내드릴까요? 원하시는 방법을 골라 주세요.', sendChips());
-  else botSay('문자·이메일 수신 동의가 없어 발송은 어려워요. 화면의 안내를 확인해 주세요.');
-  S.bot.open = true; S.bot.unread = 0;
+function botSend(kind,pid){const p=botProc(pid);if(!p)return botChoose('send');if(!(kind==='sms'?ME.consent.sms:ME.consent.email))return botSay('해당 방법의 수신 동의가 없어 미리보기를 만들 수 없어요.');botSay('[발송 미리보기 · 실제 전송 없음]\n'+p.name+'\n'+docLines(p.id));}
+function botAnswer(t){
+ const q=String(t||'').trim();if(!q)return;
+ if(/주민등록번호|계좌번호|비밀번호|\d{6}[- ]?\d{7}/.test(q))return botSay('실제 개인정보는 입력하지 말아 주세요. 서비스 이름이나 필요한 서류만 질문해 주세요.');
+ const aliases={s1:/긴급복지|기초생활|실직|생계|실업/,s2:/장기요양|장애|돌봄|노인|요양/,s3:/유족|사망|상속/};
+ const hits=botProcs().filter(p=>q.includes(p.name)||aliases[p.id]?.test(q));
+ if(hits.length>1){botChoose('docs');return;}
+ if(hits.length===1)S.bot.pid=hits[0].id;
+ const p=botProc(S.bot.pid);
+ if(/상태|진행|결과|접수됐/.test(q)){
+  if(!S.dbReady)return botSay('현재 DB에 연결되지 않아 실제 신청 상태를 조회할 수 없어요. 연결 후 내 신청함을 확인해 주세요.');
+  const mine=S.cases.filter(c=>c.applicant_ref===ME.ref&&(!p||c.proc_id===p.id));
+  const labels={'AI심사':'심사중','VALI오류':'최종 심사중'};
+  return botSay(mine.length?'내 신청 상태(합성 계정)\n'+mine.slice(0,5).map(c=>'• '+c.form_name+' — '+(labels[c.status]||c.status)).join('\n'):'조회된 내 신청이 없어요.',[{k:'mine',t:'내 신청함 열기'}]);
+ }
+ if(/기간|언제|며칠|걸려/.test(q))return botSay('시연 데이터에는 확정 처리 기간이 없어요. 실제 처리 일정은 담당 기관에 확인해 주세요.');
+ if(/서비스.*찾|다른 서비스|서비스 목록|무슨 지원/.test(q)){botChoose('docs');return;}
+ let intent=/문자|sms|이메일|메일|발송|보내/i.test(q)?'send':/대리|위임/.test(q)?'proxy':/발급|서류.*어떻게|준비 방법/.test(q)?'where':/자격|대상|조건|받을 수/.test(q)?'target':/담당|문의|연락처/.test(q)?'dept':/신청 방법|어떻게 신청|어디.*신청/.test(q)?'apply':/서류|필요|준비/.test(q)||hits.length?'docs':null;
+ if(intent)return botRespond(intent,p);
+ botSay('등록된 안내에서 답을 찾지 못했어요. 지원 서비스, 필요 서류, 신청 방법 또는 진행 상태를 물어봐 주세요.',BOT_MENU);
 }
-async function botSend(kind) {
-  const p = proc(S.procId);
-  botMe(kind === 'sms' ? '문자(SMS)로 받기' : '이메일로 받기');
-  if (!p) { botSay('먼저 신청할 서비스를 골라 주세요.'); return; }
-  if (!(kind === 'sms' ? ME.consent.sms : ME.consent.email)) { botSay('해당 방법은 수신 동의가 없어 보낼 수 없어요.'); return; }
-  try { await api('wf_view_log', { method: 'POST', body: { case_id: null, doc_id: '*', dept: (kind === 'sms' ? 'SMS' : '이메일') + ' 안내 발송(시연): ' + p.id }, headers: { Prefer: 'return=minimal' } }); } catch (e) {}
-  botSay((kind === 'sms' ? '문자(' + ME.phone + ')' : '이메일(' + ME.email + ')') + '로 “' + p.name + '” 필요 서류 안내를 보냈어요. (시연용이라 실제 발송은 되지 않아요.)');
-}
-function botAnswer(t) {
-  const p = S.procId ? proc(S.procId) : null;
-  if (/문자|sms|메일|이메일|발송|보내/i.test(t)) { botSay('어떤 방법으로 받으시겠어요?', sendChips().length ? sendChips() : null); if (!sendChips().length) botSay('수신 동의가 없어 발송은 어려워요.'); return; }
-  if (/발급|어디|어떻게/.test(t)) { if (!p) return botSay('먼저 신청할 서비스를 골라 주세요.'); botSay('서류별 준비 방법이에요.\n' + (S.pdocs[p.id] || []).map((d) => '• ' + d.name + ': ' + (d.kind === 'gov24' ? '정부24 연계로 자동 확인돼요' : d.kind === 'upload' ? '직접 발급받아 파일로 첨부해 주세요' : '주민센터·기관을 방문해 작성해요')).join('\n')); return; }
-  if (/서류|필요|준비/.test(t)) { if (!p) return botSay('먼저 신청할 서비스를 골라 주세요.'); botSay('“' + p.name + '” 필요 서류예요.\n' + docLines(p.id)); return; }
-  if (/대리|위임/.test(t)) { botSay('대리 신청은 위임장, 본인 의사 확인서, 가족관계 확인 서류가 필요해요. (시연 안내)'); return; }
-  if (/기간|언제|걸려/.test(t)) { botSay('처리 기간은 시연용 가정이라 정해져 있지 않아요. 진행 상태는 “내 신청함”에서 볼 수 있어요.'); return; }
-  if (/상태|진행|결과/.test(t)) { botSay('신청 후에는 “내 신청함” 탭에서 결재 진행 상태를 볼 수 있어요.'); return; }
-  botSay('아직 잘 모르는 질문이에요. “필요한 서류”, “서류 발급 방법”, “문자로 받기”처럼 물어봐 주세요.', [{ k: 'docs', t: '필요한 서류' }, { k: 'where', t: '서류 발급 방법' }, { k: 'status', t: '진행 상태 확인' }]);
+function botSubmit(value){if(S.role!=='citizen')return;const t=String(value||'').trim().slice(0,500);if(!t)return;S.bot.draft='';if(/\d{6}[- ]?\d{7}|주민등록번호|계좌번호|비밀번호/.test(t))botMe('개인정보 포함 가능 질문 (표시 제한)');else botMe(t);botAnswer(t);renderBot();}
+function botChip(v){
+ if(S.role!=='citizen')return;
+ const [act,pid]=String(v||'').split(':');
+ if(act==='service'){const p=botProc(pid);if(!p)return;S.bot.pid=pid;const it=S.bot.pending||'docs';S.bot.pending=null;botMe(p.name);botRespond(it,p);}
+ else if(act==='guide'){if(!botProc(pid))return;if(!S.dbReady)botSay('DB 연결 후 실제 신청 화면을 열 수 있어요. 현재는 안내만 가능합니다.');else{S.procId=pid;S.step='guide';botOnGuide(pid);render();return;}}
+ else if(act==='mine'){if(!S.dbReady)botSay('DB 연결 후 내 신청함을 확인할 수 있어요.');else{S.step='mine';S.myOpen=null;render();return;}}
+ else if(act==='sms'||act==='mail'){botMe(act==='sms'?'문자 미리보기':'이메일 미리보기');botSend(act,pid);}
+ else if(act==='services')botChoose('docs');
+ else if(['docs','where','status','send'].includes(act)){const q={docs:'필요한 서류',where:'서류 준비 방법',status:'진행 상태',send:'문자·이메일 미리보기'}[act];botMe(q);botAnswer(q);}
+ renderBot();
 }
 function renderBot() {
   const root = $('bot-root'); if (!root) return;
   if (S.role !== 'citizen') { root.innerHTML = ''; return; }
-  const old = $('bot-in'); const val = old ? old.value : ''; const focus = old && document.activeElement === old;
+  const old = $('bot-in'); const val = S.bot.draft; const focus = old && document.activeElement === old;
   const b = S.bot; const c = ME.consent;
-  const msgs = b.msgs.map((m) => '<div class="bmsg ' + m.from + '">' + esc(m.text).replace(/\n/g, '<br>') + (m.chips ? '<div class="bchips">' + m.chips.map((x) => '<button class="bchip" data-act="botchip" data-v="' + x.k + '">' + esc(x.t) + '</button>').join('') + '</div>' : '') + '</div>').join('');
-  const panel = b.open ? '<section class="bot-panel" role="dialog" aria-label="신청 도우미"><div class="bot-head">' + BOT_AV.replace('width="56" height="56"', 'width="36" height="36"') + '<b>신청 도우미</b><button class="btn" style="min-height:32px;padding:0 10px" data-act="botclose" aria-label="닫기">닫기</button></div>' +
+  const msgs = b.msgs.map((m) => '<div class="bmsg ' + m.from + '">' + esc(m.text).replace(/\n/g, '<br>') + (m.chips ? '<div class="bchips">' + m.chips.map((x) => '<button class="bchip" data-act="botchip" data-v="' + esc(x.k) + '">' + esc(x.t) + '</button>').join('') + '</div>' : '') + '</div>').join('');
+  const panel = b.open ? '<section class="bot-panel" role="dialog" aria-label="신청 도우미"><div class="bot-head">' + BOT_AV.replace('width="56" height="56"', 'width="36" height="36"') + '<b>신청 도우미 · 시연</b><button class="btn" style="min-height:32px;padding:0 10px" data-act="botclose" aria-label="닫기">닫기</button></div>' +
     '<div class="bot-log" id="bot-log" aria-live="polite">' + (msgs || '<div class="bmsg bot">안녕하세요, 신청 도우미예요. 서비스를 고르면 필요한 서류를 알려드려요.</div>') + '</div>' +
-    '<div class="bot-cons">수신 동의(시연) <button class="' + (c.sms ? 'on' : '') + '" data-act="botconsent" data-v="sms" aria-pressed="' + c.sms + '">문자 ' + (c.sms ? '동의' : '미동의') + '</button><button class="' + (c.email ? 'on' : '') + '" data-act="botconsent" data-v="email" aria-pressed="' + c.email + '">이메일 ' + (c.email ? '동의' : '미동의') + '</button></div>' +
-    '<div class="bot-foot"><input type="text" id="bot-in" placeholder="궁금한 점을 입력하세요" aria-label="질문 입력" style="flex:1"><button class="btn pri" data-act="botsend">보내기</button></div></section>' : '';
+    '<div class="bot-source">' + esc(botSource()) + ' · 실제 신청·발송 아님</div><div class="bot-cons">수신 동의(시연) <button class="' + (c.sms ? 'on' : '') + '" data-act="botconsent" data-v="sms" aria-pressed="' + c.sms + '">문자 ' + (c.sms ? '동의' : '미동의') + '</button><button class="' + (c.email ? 'on' : '') + '" data-act="botconsent" data-v="email" aria-pressed="' + c.email + '">이메일 ' + (c.email ? '동의' : '미동의') + '</button></div>' +
+    '<div class="bot-foot"><input type="text" id="bot-in" maxlength="500" placeholder="서비스 또는 필요한 서류 질문" aria-label="질문 입력" style="flex:1"><button class="btn pri" data-act="botsend">보내기</button></div></section>' : '';
   const fab = '<button class="bot-fab" data-act="' + (b.open ? 'botclose' : 'botopen') + '" aria-label="신청 도우미 ' + (b.open ? '닫기' : '열기') + '">' + BOT_AV + (!b.open && b.unread ? '<span class="dot">' + b.unread + '</span>' : '') + '</button>';
   root.innerHTML = panel + fab;
   const ni = $('bot-in'); if (ni) { ni.value = val; if (focus) ni.focus(); }
@@ -254,7 +282,7 @@ function renderBot() {
 function render() {
   $('tab-citizen').classList.toggle('on', S.role === 'citizen');
   $('tab-staff').classList.toggle('on', S.role === 'staff');
-  $('who').textContent = (S.role === 'citizen' ? '기안자: ' + ME.name + ' · 생년월일 ' + ME.birth + ' · 모든 데이터는 시연용 합성 데이터입니다' : '담당자 화면 · 접속 부서: ' + (S.dept || '-') + ' · 모든 데이터는 시연용 합성 데이터입니다') +
+  $('who').textContent = (S.role === 'citizen' ? '기안자: ' + ME.name + ' · 생년월일 ' + ME.birth + ' · 모든 데이터는 시연용 합성 데이터입니다' : '담당자 화면 · ' + (STAFF_LABEL[S.staffSeq] || '-') + ' · 접속 부서: ' + (S.dept || '-') + ' · 모든 데이터는 시연용 합성 데이터입니다') +
     ' · 서류 판독: ' + (S.engine ? 'AI Double Check 엔진 연결됨' + (S.engine.ai ? ' (AI 판독)' : ' (규칙 판독)') : '시연 모드(파일 이름 키워드)');
   const app = $('app');
   app.innerHTML = (S.toast ? '<div class="notice info" role="status">' + esc(S.toast) + '</div>' : '') + (S.role === 'citizen' ? viewCitizen() : viewStaff());
@@ -358,76 +386,72 @@ function viewApply() {
   const need = nonManual(p.id);
   const okAll = need.every((d) => S.att[d.doc_id] && S.att[d.doc_id].state !== 'wrong');
   return '<section class="card"><button class="btn" data-act="guide" data-v="' + p.id + '">← 신청 안내</button><h2 style="margin-top:12px">' + esc(p.form_name) + ' 기안</h2>' +
-    '<p class="muted">서류를 첨부하면 서류 종류가 맞는지와 정부24 연계 값을 확인합니다. ' + (S.engine ? '판독 엔진이 서류 내용을 읽어 판정합니다. (PDF·텍스트 파일)' : '시연에서는 파일 이름의 키워드로 판정합니다. (예: “이직”, “통장”, “임대”)') + '</p>' +
+    '<p class="muted">서류를 첨부하면 서류 종류가 맞는지와 정부24 연계 값을 확인합니다. ' + (S.engine ? '판독 엔진이 서류 내용을 읽어 판정합니다. (PDF·텍스트·사진 JPG/PNG)' : '시연에서는 파일 이름의 키워드로 판정합니다. (예: “이직”, “통장”, “임대”)') + '</p>' +
     docs.map((d) => {
       if (d.kind === 'manual') return '<div class="drow"><span class="grow">' + esc(d.name) + '</span><span class="chip amber">현장 방문 작성</span></div>';
       const a = S.att[d.doc_id]; const msg = S.attMsg[d.doc_id];
       return '<div style="border-top:1px solid #E5E7EB;padding:10px 0"><div class="row"><span class="grow"><b>' + esc(d.name) + '</b> <span class="chip">' + KIND[d.kind] + '</span> <span class="chip">' + esc(d.req) + '</span></span>' +
-        '<label class="btn" style="margin:0;display:inline-flex;align-items:center;cursor:pointer">서류 첨부<input type="file" data-act="file" data-v="' + d.doc_id + '" style="display:none"></label></div>' +
-        (a ? '<div class="muted" style="margin-top:6px">첨부: ' + esc(a.fname) + ' · ' + (a.state === 'ok' ? '일치' : a.state === 'mismatch' ? '정부24 대조 불일치' : '서류 불일치') + '</div>' : '') +
+        '<label class="btn" style="margin:0;display:inline-flex;align-items:center;cursor:pointer">서류 첨부<input type="file" accept=".pdf,.txt,.jpg,.jpeg,.png,image/*" data-act="file" data-v="' + d.doc_id + '" style="display:none"></label></div>' +
+        (a ? '<div class="muted" style="margin-top:6px">첨부: ' + esc(a.fname) + ' · ' + (a.state === 'ok' ? '일치' : a.state === 'mismatch' ? '정부24 대조 불일치' : '서류 불일치') + (a.readBy ? ' · ' + esc(a.readBy) : '') + '</div>' : '') +
         (msg ? '<div class="notice ' + (a && a.state === 'wrong' ? 'err' : 'warn') + '" style="margin-top:6px" role="alert">' + esc(msg) + '</div>' : '') + '</div>';
     }).join('') +
     '<div class="row" style="margin-top:12px"><button class="btn pri" data-act="submit"' + (okAll && !S.busy ? '' : ' disabled') + '>' + (S.busy ? '제출 중…' : '결재 진행(기안 제출)') + '</button>' +
     (okAll ? '' : '<span class="muted">모든 첨부 서류가 올바르게 첨부되어야 제출할 수 있습니다.</span>') + '</div></section>';
 }
 
-function viewStaff() {
-  const ds = depts(); const myProcs = S.procs.filter((p) => p.dept === S.dept).map((p) => p.id);
-  const cs = S.cases.filter((c) => myProcs.indexOf(c.proc_id) >= 0);
-  const g = { review: [], fit: [], done: [] }; cs.forEach((c) => g[group(c)].push(c));
-  const block = (title, sub, arr) => '<section class="card"><h2>' + esc(title) + ' ' + arr.length + '건</h2><p class="muted">' + esc(sub) + '</p>' + (arr.length ? arr.map(card).join('') : '<p class="muted">해당 건이 없습니다.</p>') + '</section>';
-  return '<section class="card"><h3>접속 부서</h3><div class="row" style="margin-top:8px">' + ds.map((d) => '<button class="btn' + (S.dept === d ? ' pri' : '') + '" data-act="dept" data-v="' + esc(d) + '">' + esc(d) + '</button>').join('') + '</div>' +
-    '<p class="muted" style="margin-top:8px">부서를 바꾸면 그 부서가 담당하는 신청서만 조회됩니다. 다른 절차의 신청과 서류는 조회되지 않습니다.</p>' +
-    '<div class="row" style="margin-top:8px"><button class="btn" data-act="new">+ 신청 등록</button><button class="btn pri" data-act="batch">일괄체크 실행</button></div></section>' +
-    block('검토 필요', '사각지대 위험이나 서류 오류가 있어 담당자가 직접 확인할 건입니다.', g.review) +
-    block('적합', '서류 오류와 사각지대가 없는 건입니다.', g.fit) +
-    block('처리 완료·반려', '승인되었거나 반려된 건입니다.', g.done);
+/* 핵심 기능 02: 합성데이터 시연용 UI 범위 */
+const STAFF_LABEL=['접수 담당','심사 담당','승인 담당'];
+const WF=window.SakakReview;
+const staffScope=()=>({dept:S.dept,seq:S.staffSeq});
+const caseLines=c=>(c&&S.lines[c.proc_id])||[];
+const getCase=id=>S.cases.find(c=>c.id===id);
+const staffList=c=>S.role==='staff'&&WF.canList(c,caseLines(c),staffScope());
+const staffAct=c=>S.role==='staff'&&WF.canAct(c,caseLines(c),staffScope());
+const staffEdit=c=>S.role==='staff'&&WF.canEdit(c,caseLines(c),staffScope());
+const staffDoc=(c,id)=>!!(c&&staffAct(c)&&WF.canDoc(c,caseLines(c),staffScope(),(c.wf_case_docs||[]).find(d=>d.doc_id===id),(S.pdocs[c.proc_id]||[]).find(d=>d.doc_id===id)));
+const staffIntake=()=>S.role==='staff'&&S.staffSeq===0&&S.procs.some(p=>p.dept===S.dept&&(S.lines[p.id]||[]).some(l=>l.seq===0&&l.dept===S.dept));
+function requireStaff(ok){if(!ok)throw new Error('현재 부서·결재 단계에서 수행할 수 없는 작업입니다.');}
+function viewStaff(){
+ const scopes=WF.scopes(S.lines),cs=S.cases.filter(staffList),active=cs.filter(staffAct),history=cs.filter(c=>!staffAct(c));
+ const review=active.filter(c=>group(c)==='review'||(c.findings||[]).some(f=>WF.route(f)===S.staffSeq)||!!c.typo),fit=active.filter(c=>!review.includes(c));
+ const block=(title,sub,arr)=>'<section class="card"><h2>'+esc(title)+' <span class="chip">'+arr.length+'건</span></h2><p class="muted">'+esc(sub)+'</p>'+(arr.length?arr.map(card).join(''):'<p class="muted">해당 건이 없습니다.</p>')+'</section>';
+ return '<section class="card"><h2>권한별 담당자 검토</h2><p class="muted">결재선의 부서·단계에 따라 검토할 항목을 분리합니다.</p><div class="notice warn">시연용 역할 전환입니다. DB 공개 정책에 따라 실제 인증·서버 접근 제어를 제공하지 않습니다.</div>'+
+ '<div class="scope-grid">'+scopes.map((s,i)=>'<button class="btn'+(s.dept===S.dept&&s.seq===S.staffSeq?' pri':'')+'" data-act="staff-scope" data-v="'+i+'" aria-pressed="'+(s.dept===S.dept&&s.seq===S.staffSeq)+'"><b>'+esc(STAFF_LABEL[s.seq])+'</b><small>'+esc(s.dept)+'</small></button>').join('')+'</div>'+
+ '<div class="scope-summary"><div><span class="muted">현재 내 검토 건</span><strong>'+active.length+'</strong></div><div><span class="muted">추가 검토 필요</span><strong>'+review.length+'</strong></div><div><span class="muted">이전·종료 단계</span><strong>'+history.length+'</strong></div></div>'+
+ (staffIntake()?'<div class="row"><button class="btn" data-act="new">+ 신청 등록</button></div>':'')+'</section>'+
+ block('검토 필요','현재 단계의 오류와 참고사항을 확인한 뒤 다음 결재로 전달합니다.',review)+block('일반 검토','오류가 없다는 뜻은 아닙니다. 담당자가 확인해야 합니다.',fit)+block('이전·종료 단계','진행 상태만 표시하며 상세 근거와 서류 열람은 제한합니다.',history);
 }
-
-function card(c) {
-  const docs = c.wf_case_docs || []; const defs = S.pdocs[c.proc_id] || [];
-  const open = S.openId === c.id;
-  const grp = group(c);
-  return '<div style="border-top:1px solid #E5E7EB;padding:12px 0"><div class="row"><span class="grow"><b>' + esc(c.form_name) + '</b><br>기안자 ' + esc(c.applicant_name) + ' · 생년월일 ' + esc(c.birth || '-') + '</span>' +
-    '<span style="text-align:right">' + statusChip(c) + '<br><span class="muted">' + fmtDate(c.created_at) + '</span></span></div>' +
-    (grp === 'review' && !(c.findings && c.findings.length) ? '<ul style="margin:8px 0 0;padding-left:20px;color:#7F1D1D">' + c.reasons.map((r) => '<li>' + esc(r) + '</li>').join('') + '</ul>' : '') +
-    (c.findings && c.findings.length ? dcPanel(c) : '') +
-    (c.status === 'VALI오류' && c.typo ? '<div class="notice err" style="margin-top:8px" role="alert">VALI 체크: ' + esc(c.typo.field) + ' 입력값 “' + esc(c.typo.wrong) + '” ↔ 원본 서류 “' + esc(c.typo.right) + '” 불일치(담당자 오탈자)</div>' : '') +
-    '<div class="row" style="margin-top:8px"><button class="btn" data-act="detail" data-v="' + c.id + '">' + (open ? '매칭정보 닫기' : '매칭정보 보기') + '</button>' +
-    (grp !== 'done' && c.status !== 'AI심사' && c.status !== 'VALI오류' ? '<button class="btn ok" data-act="approve" data-v="' + c.id + '">승인</button><button class="btn bad" data-act="reject" data-v="' + c.id + '">반려</button>' : '') +
-    (c.status === 'VALI오류' ? '<button class="btn pri" data-act="revali" data-v="' + c.id + '">수정 후 재검증</button>' : '') +
-    '<button class="btn" data-act="edit" data-v="' + c.id + '">수정</button><button class="btn bad" data-act="del" data-v="' + c.id + '">삭제</button></div>' +
-    (open ? '<div class="detail">' + (docs.length ? docs.map((d) => {
-      const df = defs.find((x) => x.doc_id === d.doc_id) || {};
-      return '<div class="drow"><span class="grow"><b>' + esc(df.name) + '</b> <span class="chip">' + KIND[df.kind] + '</span><br><span class="muted">' + (d.state === 'ok' ? '일치' : d.state === 'mismatch' ? '정부24 대조 불일치' : '서류 불일치') + (d.fname ? ' · ' + esc(d.fname) : '') + '</span>' +
-        (d.state === 'mismatch' && df.diff ? '<br><span class="muted">' + esc(df.diff) + '</span>' : '') + '</span>' +
-        '<button class="btn" data-act="view" data-c="' + c.id + '" data-v="' + d.doc_id + '">서류 열람</button></div>';
-    }).join('') : '<span class="muted">첨부 서류 정보가 없습니다.</span>') + '</div>' : '') + '</div>';
+function card(c){
+ if(!staffList(c))return '';
+ const active=staffAct(c),open=active&&S.openId===c.id,defs=S.pdocs[c.proc_id]||[],docs=active?(c.wf_case_docs||[]).filter(d=>staffDoc(c,d.doc_id)):[],next=active&&WF.next(c,caseLines(c),staffScope());
+ const typo=active&&c.typo&&(S.staffSeq===0||c.status==='VALI오류'),legacy=active&&S.staffSeq===1&&!(c.findings||[]).length&&Array.isArray(c.reasons)&&c.reasons.length;
+ return '<div style="border-top:1px solid #E5E7EB;padding:14px 0"><div class="case-head"><span class="grow"><b>'+esc(c.form_name)+'</b><br><span class="muted">'+(active?'기안자 '+esc(c.applicant_name):'상세 신청자 정보 숨김')+'</span></span><span>'+statusChip(c)+' <span class="chip">단계 '+(WF.stage(c)+1)+'/3</span><br><span class="muted">'+fmtDate(c.created_at)+'</span></span></div>'+stepper(c)+
+ (!active?'<div class="restricted">현재 검토 권한이 없습니다. 진행 상태만 확인할 수 있습니다.</div>':dcPanel(c)+
+ (legacy?'<div class="notice warn"><b>기존 시연 데이터의 검토 사유</b><ul>'+c.reasons.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul></div>':'')+
+ (WF.unassigned(c)?'<div class="notice err">담당 단계가 불명확한 오류가 있습니다. 분류를 확인하기 전에는 전달할 수 없습니다.</div>':'')+
+ (typo?'<div class="notice err">VALI 체크: '+esc(c.typo.field)+' 입력값 “'+esc(c.typo.wrong)+'” ↔ 원본 “'+esc(c.typo.right)+'” 불일치</div>':'')+
+ '<div class="scope-actions"><button class="btn" data-act="detail" data-v="'+esc(c.id)+'">'+(open?'매칭정보 닫기':'허용된 서류 보기')+'</button>'+
+ (next?'<button class="btn '+(S.staffSeq===2?'ok':'pri')+'" data-act="approve" data-v="'+esc(c.id)+'">'+(S.staffSeq===2?'최종 검토 완료':'검토 후 다음 단계 전달')+'</button>':'')+
+ (S.staffSeq===2?'<button class="btn bad" data-act="reject" data-v="'+esc(c.id)+'">반려 검토</button>':'')+
+ (typo?'<button class="btn pri" data-act="revali" data-v="'+esc(c.id)+'">수정값 입력 및 재검증</button>':'')+
+ (staffEdit(c)?'<button class="btn" data-act="edit" data-v="'+esc(c.id)+'">신청 수정</button><button class="btn bad" data-act="del" data-v="'+esc(c.id)+'">삭제</button>':'')+'</div>'+
+ '<p class="scope-note">AI 결과는 검토 후보입니다. 다음 단계 전달은 담당자의 확인이며 실제 급여 자격이나 지급을 결정하지 않습니다.</p>'+
+ (open?'<div class="detail">'+(docs.length?docs.map(d=>{const df=defs.find(x=>x.doc_id===d.doc_id)||{};return '<div class="drow"><span class="grow"><b>'+esc(df.name)+'</b> <span class="chip">'+esc(KIND[df.kind])+'</span><br><span class="muted">'+esc(({ok:'일치',mismatch:'원본 대조 불일치',wrong:'서류 불일치',missing:'미첨부'})[d.state]||'확인 필요')+'</span></span><button class="btn" data-act="view" data-c="'+esc(c.id)+'" data-v="'+esc(d.doc_id)+'">서류 열람</button></div>';}).join(''):'<span class="muted">현재 단계에서 열람 가능한 제출 서류가 없습니다.</span>')+'</div>':''))+'</div>';
 }
-
-/* AI Double Check 점검 결과: 결재선 단계(A 접수 · B 심사 · C 승인)별로 나눠, 지금 단계를 강조한다 */
-function dcPanel(c) {
-  const line = (S.lines && S.lines[c.proc_id]) || [];
-  const fs = c.findings.filter((f) => f.severity !== 'low' && f.severity !== 'info');
-  const low = c.findings.length - fs.length;
-  const now = c.stage || 0;
-  const stages = [0, 1, 2].map((i) => {
-    const mine = fs.filter((f) => (f.stage_seq != null ? f.stage_seq : ROLE_SEQ[f.role]) === i);
-    const l = line[i] || { label: '결재자 ' + 'ABC'[i], dept: '' };
-    return '<div class="dc-stage' + (i === now && c.status !== '완료' && c.status !== '반려' ? ' now' : '') + '"><b>' + esc(l.label) + ' · ' + ['접수', '심사', '승인'][i] + '</b> <span class="muted">' + esc(l.dept) + '</span> ' +
-      (mine.length ? '<span class="chip red">확인 ' + mine.length + '건</span>' : '<span class="chip green">확인 사항 없음</span>') +
-      mine.map((f) => '<div class="dc-item"><span class="chip ' + (SEV[f.severity] || SEV.info)[0] + '">' + (SEV[f.severity] || SEV.info)[1] + '</span> <b>' + esc(f.title) + '</b><div class="muted">' + esc(f.detail) + '</div>' +
-        (f.evidence || []).slice(0, 2).map((e) => '<div class="dc-ev">근거 · ' + esc(e.doc) + ' · ' + esc(e.field) + ': “' + esc(e.excerpt) + '”</div>').join('') +
-        (f.gov ? '<div class="dc-ev">원본 · ' + esc(f.gov.source) + ': ' + esc(f.gov.value) + '</div>' : '') +
-        (f.action ? '<div class="muted" style="margin-top:2px">조치: ' + esc(f.action) + '</div>' : '') + '</div>').join('') + '</div>';
-  }).join('');
-  return '<div class="dc"><div class="dc-head">AI Double Check 점검 결과 <span class="chip">' + fs.length + '건</span>' + (low ? '<span style="font-weight:400">· 참고 ' + low + '건(현장 작성 서류 등) 생략</span>' : '') + '</div>' + stages + '</div>';
+function dcPanel(c){
+ if(!staffAct(c))return '';
+ const own=WF.findings(c,caseLines(c),staffScope());
+ return '<div class="dc"><div class="dc-head">AI Double Check · '+esc(STAFF_LABEL[S.staffSeq])+' <span class="chip">'+own.length+'건</span></div><div class="dc-stage now"><b>현재 담당 단계의 점검 결과</b><p class="muted">다른 결재 단계의 오류 상세와 근거는 표시하지 않습니다.</p>'+
+ (own.length?own.map(f=>'<div class="dc-item"><span class="chip '+(SEV[f.severity]||SEV.info)[0]+'">'+(SEV[f.severity]||SEV.info)[1]+'</span> <b>'+esc(f.title)+'</b><div class="muted">'+esc(f.detail)+'</div>'+
+ (Array.isArray(f.evidence)?f.evidence.slice(0,3).map(e=>'<div class="dc-ev">근거 · '+esc(e.doc)+' · '+esc(e.field)+': “'+esc(e.excerpt)+'”</div>').join(''):'')+(f.gov?'<div class="dc-ev">원본 · '+esc(f.gov.source)+': '+esc(Array.isArray(f.gov.value)?f.gov.value.join(', '):f.gov.value)+'</div>':'')+
+ (f.clause?'<div class="dc-ev">엔진 제시 정책 근거(담당자 확인 필요) · '+esc(f.clause)+'</div>':'')+(f.action?'<div class="muted">조치: '+esc(f.action)+'</div>':'')+
+ (Array.isArray(f.clause_links)&&f.clause_links.length?'<div class="muted">근거 조문(법제처에서 조문 제목 확인): '+f.clause_links.map(l=>/^https:\/\/www\.law\.go\.kr\//.test(l.url)?'<a href="'+esc(l.url)+'" target="_blank" rel="noopener">'+esc(l.text)+'</a>':esc(l.text)).join(' · ')+'</div>':'')+'</div>').join(''):'<p class="muted">'+((c.findings||[]).length?'해당 단계에 배정된 점검 결과가 없습니다.':'저장된 AI 상세 결과가 없습니다. 기존 시연 자료를 확인하세요.')+'</p>')+'</div></div>';
 }
 
 function viewModal() {
   const m = S.modal;
   if (m.type === 'view') {
-    const c = S.cases.find((x) => x.id === m.c); const df = (S.pdocs[c.proc_id] || []).find((x) => x.doc_id === m.d) || {};
+    const c = S.cases.find((x) => x.id === m.c); if(!staffDoc(c,m.d))return ''; const df = (S.pdocs[c.proc_id] || []).find((x) => x.doc_id === m.d) || {};
     const cd = (c.wf_case_docs || []).find((x) => x.doc_id === m.d) || {};
     const wm = Array(24).fill('<span>열람 전용 · 복사 금지 · ' + esc(S.dept) + '</span>').join('');
     return '<div class="modal-bg"><div class="modal" role="dialog" aria-modal="true" aria-label="서류 열람">' +
@@ -436,13 +460,15 @@ function viewModal() {
       '<p>신청인: ' + esc(c.applicant_name) + '<br>생년월일: ' + esc(c.birth || '-') + '</p>' +
       (cd.fname ? '<p>첨부 파일명: ' + esc(cd.fname) + '</p>' : '') +
       (cd.signs && cd.signs.length ? '<div class="notice err"><b>위·변조 의심 징후 (시연용 예시)</b><ul style="margin:6px 0 0;padding-left:18px">' + cd.signs.map((s) => '<li>' + esc(s) + '</li>').join('') + '</ul></div>' : '') + '</div>' +
-      '<div class="notice warn">화면 수준의 보호입니다(다운로드 버튼 없음, 복사·우클릭·인쇄 차단, 워터마크). 화면 캡처와 개발자 도구는 막지 못합니다. 열람 기록은 DB에 남습니다.</div>' +
+      '<div class="notice warn">화면 수준의 보호입니다(다운로드 버튼 없음, 워터마크와 일부 복사 동작 제한). 화면 캡처와 개발자 도구는 막지 못합니다. 실제 원본이 아닌 합성 서류 화면입니다. 열람 요청 기록을 DB에 저장합니다.</div>' +
       '<div class="row"><button class="btn pri" data-act="close">닫기</button></div></div></div>';
   }
   if (m.type === 'del') {
+ if(!staffEdit(getCase(m.id)))return '';
     return '<div class="modal-bg"><div class="modal" role="dialog" aria-modal="true"><h2>신청 삭제</h2><p>“' + esc(m.name) + '” 신청 카드를 삭제합니다. 삭제하면 되돌릴 수 없습니다.</p><div class="row"><button class="btn bad" data-act="delok" data-v="' + m.id + '">삭제</button><button class="btn" data-act="close">취소</button></div></div></div>';
   }
   const e = m.type === 'edit' ? S.cases.find((x) => x.id === m.id) : null;
+ if(m.type==='edit'&&!staffEdit(e))return ''; if(m.type==='new'&&!staffIntake())return '';
   const pOpts = S.procs.filter((p) => p.dept === S.dept).map((p) => '<option value="' + p.id + '"' + (e && e.proc_id === p.id ? ' selected' : '') + '>' + esc(p.form_name) + '</option>').join('');
   return '<div class="modal-bg"><div class="modal" role="dialog" aria-modal="true"><h2>' + (e ? '신청 수정' : '신청 등록') + '</h2>' +
     (S.formErr ? '<div class="notice err" role="alert">' + esc(S.formErr) + '</div>' : '') +
@@ -458,6 +484,7 @@ function viewModal() {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function run(fn) {
   try { await fn(); } catch (e) { S.toast = String(e.message || e); }
+  if(!S.dbReady){$('app').innerHTML='<div class="notice err">DB 연결 대기 중입니다. 다시 연결해 주세요.</div><button class="btn" data-act="reload">다시 연결</button>';renderBot();return;}
   render();
 }
 async function refresh() { await loadAll(); }
@@ -470,7 +497,7 @@ async function attachFile(docId, file) {
     try {
       const data = await toB64(file);
       const r = await engine('/api/check-doc', { proc_id: p.id, doc_id: docId, filename: file.name, data: data });
-      S.att[docId] = { fname: file.name, sim: r.sim, state: r.state, data: data };
+      S.att[docId] = { fname: file.name, sim: r.sim, state: r.state, data: data, readBy: r.read_by };
       S.attMsg[docId] = r.state === 'wrong' ? WRONG_MSG + (r.detected_type ? ' (판독 결과: ' + r.detected_type + ')' : '') :
         (r.suspicious && r.suspicious.length ? '서류 안에 판독을 조작하려는 듯한 문장이 있어 담당자가 확인합니다.' : '');
     } catch (e) { S.att[docId] = null; S.attMsg[docId] = e.message; }
@@ -520,14 +547,31 @@ async function submitCase() {
   await refresh();
 }
 
-async function approve(id) {
-  await patch(id, { status: 'AI심사', stage: 2 }); await refresh(); render();
-  await sleep(1300);
-  const c = S.cases.find((x) => x.id === id);
-  await patch(id, { status: c && c.typo ? 'VALI오류' : '완료', stage: 2 }); await refresh();
+async function stagePatch(c,body){
+ requireStaff(staffAct(c));
+ const r=await api('wf_cases?id=eq.'+encodeURIComponent(c.id)+'&stage=eq.'+WF.stage(c)+'&status=eq.'+encodeURIComponent(c.status),{method:'PATCH',body:Object.assign({updated_at:new Date().toISOString()},body)});
+ if(!Array.isArray(r)||r.length!==1)throw new Error('다른 담당자가 상태를 변경했습니다. 새로고침 후 재확인하세요.');
 }
-
+async function approve(id){
+ const c=getCase(id);requireStaff(staffAct(c));const next=WF.next(c,caseLines(c),staffScope());
+ if(!next)throw new Error('결재선 또는 미해결 오류를 확인하세요.');
+ const msg=S.staffSeq===2?'종합 검토를 완료하시겠습니까? 실제 급여 지급이나 수급자격 결정은 수행하지 않습니다.':'현재 단계의 근거와 조치 사항을 확인하고 다음 담당자에게 전달하시겠습니까?';
+ if(!window.confirm(msg))return;
+ await stagePatch(c,next);S.openId=null;S.toast=S.staffSeq===2?'종합 검토 완료(시연)':'검토를 확인하고 다음 결재 단계로 전달했습니다.';await refresh();
+}
+async function rejectCase(id){
+ const c=getCase(id);requireStaff(staffAct(c)&&S.staffSeq===2);
+ if(!window.confirm('반려 검토를 기록하시겠습니까? 시연 상태만 변경됩니다.'))return;
+ await stagePatch(c,{status:'반려'});S.openId=null;await refresh();
+}
+async function revalidateCase(id){
+ const c=getCase(id);requireStaff(staffAct(c)&&c.typo&&(S.staffSeq===0||c.status==='VALI오류'));
+ const v=window.prompt('참조 서류를 확인한 후 수정값을 입력하세요.');if(v===null)return;
+ if(c.typo.right==null||v.trim()!==String(c.typo.right).trim())throw new Error('수정값이 참조값과 일치하지 않습니다. 재검증 실패.');
+ await stagePatch(c,{typo:null,status:c.status==='VALI오류'?'AI심사':c.status});S.toast='해당 오탈자 대조를 통과했습니다. 결재는 별도 검토가 필요합니다.';await refresh();
+}
 async function saveForm(id) {
+  requireStaff(id?staffEdit(getCase(id)):staffIntake());
   const name = $('f-name').value.trim(); const birth = $('f-birth').value; const blind = $('f-blind').value.trim();
   if (!name) { S.formErr = '기안자 성명을 입력하세요.'; return; }
   if (!birth) { S.formErr = '생년월일을 입력하세요.'; return; }
@@ -550,10 +594,12 @@ async function saveForm(id) {
 document.addEventListener('click', (ev) => {
   const t = ev.target.closest('[data-act]'); if (!t || t.tagName === 'INPUT') return;
   const a = t.dataset.act, v = t.dataset.v;
+  if(!S.dbReady&&!['botopen','botclose','botconsent','botsend','botchip','reload'].includes(a))return;
   S.toast = '';
-  if (a === 'role') { S.role = v; render(); }
+  if (a === 'role') { if(v!=='citizen'&&v!=='staff')return; S.role=v; S.openId=null;S.modal=null; render(); }
+  else if(a==='staff-scope'){if(S.role!=='staff')return;const s=WF.scopes(S.lines)[Number(v)];if(!s)return;S.dept=s.dept;S.staffSeq=s.seq;S.openId=null;S.modal=null;render();}
   else if (a === 'cat') { S.cat = v; render(); }
-  else if (a === 'home') { S.step = 'list'; render(); }
+  else if (a === 'home') { S.step = 'list'; S.bot.pid=null;S.bot.pending=null; render(); }
   else if (a === 'mine') run(async () => { S.step = 'mine'; S.myOpen = null; await refresh(); });
   else if (a === 'reload') run(refresh);
   else if (a === 'reqview') run(async () => { await api('wf_view_log', { method: 'POST', body: { case_id: v, doc_id: '*', dept: '열람요청(기안자)' }, headers: { Prefer: 'return=minimal' } }); S.toast = '서류 열람 요청이 접수되었습니다. 담당 부서가 확인한 뒤 안내해 드립니다.'; });
@@ -561,50 +607,44 @@ document.addEventListener('click', (ev) => {
   else if (a === 'mfilter') { const fs = $('f-s').value, fe = $('f-e').value, fq = $('f-q').value.trim(); if (fs && fe && fs > fe) { $('mine-err').innerHTML = '<div class="notice err" role="alert">시작일자가 마감일자보다 늦습니다. 기간을 다시 선택해 주세요.</div>'; return; } S.fs = fs; S.fe = fe; S.fq = fq; S.af = { s: fs, e: fe, q: fq }; S.myOpen = null; render(); }
   else if (a === 'mreset') { S.fs = ''; S.fe = ''; S.fq = ''; S.af = { s: '', e: '', q: '' }; S.myOpen = null; render(); }
   else if (a === 'guide') { ev.preventDefault(); S.procId = v; S.step = 'guide'; botOnGuide(v); S.recent = [v].concat((S.recent || []).filter((x) => x !== v)).slice(0, 5); render(); }
-  else if (a === 'botopen') { S.bot.open = true; S.bot.unread = 0; render(); }
-  else if (a === 'botclose') { S.bot.open = false; render(); }
-  else if (a === 'botconsent') { ME.consent[v] = !ME.consent[v]; render(); }
-  else if (a === 'botsend') { const i = $('bot-in'); const t = i ? i.value.trim() : ''; if (t) { botMe(t); i.value = ''; botAnswer(t); } render(); }
-  else if (a === 'botchip') {
-    if (v === 'sms' || v === 'mail') run(() => botSend(v === 'sms' ? 'sms' : 'mail'));
-    else if (v === 'no') { botMe('괜찮아요'); botSay('알겠어요. 필요하면 언제든 불러 주세요.'); render(); }
-    else { const q = { docs: '필요한 서류', where: '서류 발급 방법', status: '진행 상태 확인' }[v]; botMe(q); botAnswer(q); render(); }
-  }
+  else if (a === 'botopen') { if(S.role==='citizen'){botOpen();renderBot();} }
+  else if (a === 'botclose') { S.bot.open = false; renderBot(); }
+  else if (a === 'botconsent') { if(S.role==='citizen'&&['sms','email'].includes(v)){ME.consent[v]=!ME.consent[v];renderBot();} }
+  else if (a === 'botsend') {const i=$('bot-in');botSubmit(i?i.value:'');}
+  else if (a === 'botchip') botChip(v);
   else if (a === 'search') { S.q = ($('q-input') || {}).value || ''; render(); }
   else if (a === 'sort') { S.sort = v; render(); }
   else if (a === 'apply') { S.att = {}; S.attCount = {}; S.attMsg = {}; S.step = 'apply'; render(); }
   else if (a === 'submit') run(submitCase);
-  else if (a === 'dept') { S.dept = v; S.openId = null; render(); }
-  else if (a === 'detail') { S.openId = S.openId === v ? null : v; render(); }
-  else if (a === 'batch') run(async () => {
-    const targets = S.cases.filter((c) => S.procs.some((p) => p.id === c.proc_id && p.dept === S.dept) && c.status === '접수');
-    for (const c of targets) await patch(c.id, { status: '체크완료', stage: 1 });
-    S.toast = '일괄체크 완료: ' + targets.length + '건을 점검했습니다. 사각지대·서류 오류가 있는 건은 “검토 필요”에 남습니다.'; await refresh();
-  });
+  else if (a === 'detail') { if(!staffAct(getCase(v)))return; S.openId = S.openId === v ? null : v; render(); }
   else if (a === 'approve') run(() => approve(v));
-  else if (a === 'reject') run(async () => { await patch(v, { status: '반려' }); await refresh(); });
-  else if (a === 'revali') run(async () => { await patch(v, { typo: null, status: '완료' }); S.toast = '수정 후 재검증을 통과했습니다.'; await refresh(); });
-  else if (a === 'new') { S.formErr = ''; S.modal = { type: 'new' }; render(); }
-  else if (a === 'edit') { S.formErr = ''; S.modal = { type: 'edit', id: v }; render(); }
-  else if (a === 'del') { const c = S.cases.find((x) => x.id === v); S.modal = { type: 'del', id: v, name: c.applicant_name + ' · ' + c.form_name }; render(); }
-  else if (a === 'delok') run(async () => { await api('wf_cases?id=eq.' + encodeURIComponent(v), { method: 'DELETE' }); S.modal = null; S.openId = null; S.toast = '삭제되었습니다.'; await refresh(); });
+  else if (a === 'reject') run(() => rejectCase(v));
+  else if (a === 'revali') run(() => revalidateCase(v));
+  else if (a === 'new') { if(!staffIntake())return;S.formErr = ''; S.modal = { type: 'new' }; render(); }
+  else if (a === 'edit') { if(!staffEdit(getCase(v)))return; S.formErr = ''; S.modal = { type: 'edit', id: v }; render(); }
+  else if (a === 'del') { const c=getCase(v);if(!staffEdit(c))return; S.modal = { type: 'del', id: v, name: c.applicant_name + ' · ' + c.form_name }; render(); }
+  else if (a === 'delok') run(async () => { requireStaff(staffEdit(getCase(v)));const r=await api('wf_cases?id=eq.'+encodeURIComponent(v)+'&stage=eq.0&status=eq.'+encodeURIComponent('접수'),{method:'DELETE'});if(!Array.isArray(r)||r.length!==1)throw new Error('삭제되지 않았습니다. 상태를 새로고침하세요.');S.modal=null;S.openId=null;S.toast='삭제되었습니다.';await refresh(); });
   else if (a === 'save') run(() => saveForm(v));
   else if (a === 'close') { S.modal = null; render(); }
-  else if (a === 'view') {
-    const cid = t.dataset.c; S.modal = { type: 'view', c: cid, d: v }; render();
-    api('wf_view_log', { method: 'POST', body: { case_id: cid, doc_id: v, dept: S.dept }, headers: { Prefer: 'return=minimal' } }).catch(() => {});
-  }
+  else if (a === 'view') run(async () => {
+ const cid=t.dataset.c;requireStaff(staffDoc(getCase(cid),v));
+ const scope=staffScope();
+ await api('wf_view_log',{method:'POST',body:{case_id:cid,doc_id:v,dept:scope.dept},headers:{Prefer:'return=minimal'}});
+ if(S.dept===scope.dept&&S.staffSeq===scope.seq&&staffDoc(getCase(cid),v))S.modal={type:'view',c:cid,d:v};
+ });
 });
+document.addEventListener('input', ev=>{if(ev.target?.id==='bot-in')S.bot.draft=ev.target.value;});
 document.addEventListener('change', (ev) => {
   if (ev.target.id === 'lim') { S.limit = parseInt(ev.target.value, 10); render(); return; }
   const t = ev.target; if (t.dataset && t.dataset.act === 'file' && t.files[0]) { attachFile(t.dataset.v, t.files[0]).then(render); }
 });
-document.addEventListener('keydown', (ev) => { if (ev.target && ev.target.id === 'q-input' && ev.key === 'Enter') { S.q = ev.target.value; render(); return; } if (ev.target && ev.target.id === 'bot-in' && ev.key === 'Enter') { const t = ev.target.value.trim(); if (t) { botMe(t); ev.target.value = ''; botAnswer(t); render(); } return; } if (S.modal && S.modal.type === 'view' && (ev.ctrlKey || ev.metaKey) && /^[cpsa]$/i.test(ev.key)) ev.preventDefault(); });
+document.addEventListener('keydown', (ev) => { if (ev.target && ev.target.id === 'q-input' && ev.key === 'Enter') { S.q = ev.target.value; render(); return; } if (ev.target && ev.target.id === 'bot-in' && ev.key === 'Enter') { if(ev.isComposing||ev.keyCode===229)return;ev.preventDefault();botSubmit(ev.target.value);return; } if (S.modal && S.modal.type === 'view' && (ev.ctrlKey || ev.metaKey) && /^[cpsa]$/i.test(ev.key)) ev.preventDefault(); });
 document.addEventListener('copy', (ev) => { if (S.modal && S.modal.type === 'view') ev.preventDefault(); });
 
 (async function init() {
+  renderBot();
   await checkEngine();
-  try { await loadAll(); } catch (e) { $('app').innerHTML = '<div class="notice err">DB에 연결하지 못했습니다. ' + esc(e.message) + '</div>'; return; }
+  try { await loadAll(); } catch (e) { S.dbReady=false; $('app').innerHTML = '<div class="notice err">DB에 연결하지 못했습니다. 신청 도우미의 시연용 안내는 이용할 수 있습니다.</div><button class="btn" data-act="reload">다시 연결</button>'; renderBot(); return; }
   render();
 })();
 </script>
